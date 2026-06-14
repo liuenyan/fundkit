@@ -1,0 +1,4 @@
+charts/
+venv/
+__pycache__/
+*.pyc
