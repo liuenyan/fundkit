@@ -63,6 +63,13 @@ def parse_args():
     )
     p.add_argument("--output", default=None, help="CSV 导出路径")
     p.add_argument("--chart", default="./charts", help="图表输出目录")
+
+    p.add_argument("--take-profit", type=float, default=0,
+                   help="目标止盈收益率 (如 0.20 表示收益达 20%% 即卖出)")
+    p.add_argument("--trailing-stop", type=float, default=0,
+                   help="移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)")
+    p.add_argument("--tp-cycle", action="store_true",
+                   help="循环止盈模式（止盈后重新开始定投）")
     return p.parse_args()
 
 
@@ -174,57 +181,164 @@ def get_redeem_rate(hold_days, schedule=None):
     return 0.0
 
 
-def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=None):
-    """执行定投模拟"""
+def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=None,
+                 take_profit=None, tp_cycle=False, trailing_stop=None):
+    """执行定投模拟（支持止盈策略）"""
     nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
+    stop_profit_on = take_profit is not None or trailing_stop is not None
+
+    # ── 无止盈策略：保留原始逻辑（仅定投日） ──
+    if not stop_profit_on:
+        records = []
+        total_units = 0.0
+        total_cost = 0.0
+        for date in invest_dates:
+            nav = nav_dict.get(date)
+            if nav is None:
+                continue
+            actual = amount * (1 - purchase_rate)
+            units = actual / nav
+            total_units += units
+            total_cost += amount
+            market_value = total_units * nav
+            records.append({
+                "date": date, "nav": nav, "investment": amount,
+                "units_added": units, "total_units": total_units,
+                "total_cost": total_cost, "market_value": market_value,
+                "profit": market_value - total_cost,
+                "return_rate": (market_value - total_cost) / total_cost,
+            })
+        detail = pd.DataFrame(records)
+        if detail.empty:
+            print("错误：未生成有效的定投记录")
+            sys.exit(1)
+        latest_date = max(nav_dict.keys())
+        latest_nav = nav_dict[latest_date]
+        total_redeem_fee = 0.0
+        for _, row in detail.iterrows():
+            hold = (latest_date - row["date"]).days
+            fee_rate = get_redeem_rate(hold, redeem_schedule)
+            total_redeem_fee += row["units_added"] * latest_nav * fee_rate
+        final_val = detail.iloc[-1]["market_value"] - total_redeem_fee
+        return detail, [], total_redeem_fee, final_val
+
+    # ── 有止盈策略：按交易日遍历，检查止盈条件 ──
+    all_dates = nav_df["date"].values
+    invest_set = set(invest_dates)
 
     records = []
-    total_units = 0.0
-    total_cost = 0.0
+    events = []
 
-    for date in invest_dates:
+    total_units = 0.0        # 当前轮次持有份额
+    round_cost = 0.0         # 当前轮次投入总额
+    total_invested = 0.0     # 全部轮次累计投入
+    total_recovered = 0.0    # 止盈到账总额（本金+收益）
+    is_active = True         # 是否继续定投
+    peak_return = -float("inf")
+    fee_batches = []         # 每笔申购记录，用于计算赎回费
+
+    for d in all_dates:
+        date = pd.Timestamp(d)
         nav = nav_dict.get(date)
         if nav is None:
             continue
 
-        actual = amount * (1 - purchase_rate)
-        units = actual / nav
-        total_units += units
-        total_cost += amount
-        market_value = total_units * nav
+        # ── 申购 ──
+        invested_today = 0.0
+        units_added_today = 0.0
+        if is_active and date in invest_set:
+            actual = amount * (1 - purchase_rate)
+            units_added_today = actual / nav
+            total_units += units_added_today
+            round_cost += amount
+            total_invested += amount
+            invested_today = amount
+            fee_batches.append({"date": date, "units": units_added_today})
 
-        records.append(
-            {
+        # ── 当前持仓市值 ──
+        if total_units > 0:
+            market_value = total_units * nav
+            round_return = (market_value - round_cost) / round_cost
+        else:
+            market_value = 0.0
+            round_return = 0.0
+
+        if round_return > peak_return:
+            peak_return = round_return
+
+        # ── 止盈检查 ──
+        should_sell = False
+        sell_reason = ""
+        if total_units > 0:
+            if take_profit is not None and round_return >= take_profit:
+                should_sell = True
+                sell_reason = f"目标收益率 {take_profit*100:.0f}%"
+            if trailing_stop is not None and peak_return >= trailing_stop and round_return <= peak_return - trailing_stop:
+                should_sell = True
+                sell_reason = f"移动止盈（回撤 {trailing_stop*100:.0f}%）"
+
+        if should_sell:
+            fee = 0.0
+            for b in fee_batches:
+                hold = (date - b["date"]).days
+                rate = get_redeem_rate(hold, redeem_schedule)
+                fee += b["units"] * nav * rate
+            net_proceeds = market_value - fee
+            events.append({
                 "date": date,
                 "nav": nav,
-                "investment": amount,
-                "units_added": units,
-                "total_units": total_units,
-                "total_cost": total_cost,
-                "market_value": market_value,
-                "profit": market_value - total_cost,
-                "return_rate": (market_value - total_cost) / total_cost,
-            }
-        )
+                "return_rate": round_return,
+                "round_cost": round_cost,
+                "profit": market_value - round_cost,
+                "redeem_fee": fee,
+                "net_proceeds": net_proceeds,
+                "reason": sell_reason,
+            })
+            total_recovered += net_proceeds
+            total_units = 0.0
+            round_cost = 0.0
+            market_value = 0.0
+            round_return = 0.0
+            peak_return = -float("inf")
+            fee_batches = []
+            if not tp_cycle:
+                is_active = False
+
+        # ── 整体组合指标 ──
+        total_value = market_value + total_recovered
+        overall_profit = total_value - total_invested
+        overall_return = overall_profit / total_invested if total_invested > 0 else 0.0
+
+        records.append({
+            "date": date,
+            "nav": nav,
+            "investment": invested_today,
+            "units_added": units_added_today,
+            "total_units": total_units,
+            "total_cost": round_cost,
+            "market_value": market_value,
+            "profit": overall_profit,
+            "return_rate": overall_return,
+            "total_invested": total_invested,
+            "total_value": total_value,
+        })
 
     detail = pd.DataFrame(records)
     if detail.empty:
         print("错误：未生成有效的定投记录")
         sys.exit(1)
 
-    latest_date = max(nav_dict.keys())
-    latest_nav = nav_dict[latest_date]
+    # ── 期末赎回费 ──
+    final_redeem_fee = 0.0
+    if total_units > 0 and fee_batches:
+        last_row = detail.iloc[-1]
+        for b in fee_batches:
+            hold = (last_row["date"] - b["date"]).days
+            rate = get_redeem_rate(hold, redeem_schedule)
+            final_redeem_fee += b["units"] * last_row["nav"] * rate
 
-    total_redeem_fee = 0.0
-    for _, row in detail.iterrows():
-        hold = (latest_date - row["date"]).days
-        fee_rate = get_redeem_rate(hold, redeem_schedule)
-        total_redeem_fee += row["units_added"] * latest_nav * fee_rate
-
-    final_value_before = detail.iloc[-1]["market_value"]
-    final_value_after = final_value_before - total_redeem_fee
-
-    return detail, total_redeem_fee, final_value_after
+    final_value = total_recovered + (market_value - final_redeem_fee)
+    return detail, events, final_redeem_fee, final_value
 
 
 def calc_annualized(ret, start, end):
@@ -319,9 +433,6 @@ def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, cha
     if not detail.empty:
         assert "total_cost" in detail.columns
         assert "total_units" in detail.columns
-        assert detail["total_units"].iloc[-1] > 0, "total_units 未累计"
-        avg = detail["total_cost"] / detail["total_units"]
-        assert avg.notna().any(), "avg 全是 NaN"
 
     fig, axes = plt.subplots(2, 1, figsize=(12, 10), sharex=False)
 
@@ -333,7 +444,7 @@ def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, cha
              ls="--", alpha=0.6, label="累计净值")
 
     if not detail.empty:
-        avg = detail["total_cost"] / detail["total_units"]
+        avg = (detail["total_cost"] / detail["total_units"]).replace([np.inf, -np.inf], np.nan)
         ax1.plot(detail["date"], avg, color="crimson", lw=2, label="定投平均成本")
 
     ax1.set_title(f"{fund_name}（{fund_code}）净值走势与定投成本")
@@ -347,8 +458,9 @@ def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, cha
         ret = detail["return_rate"] * 100
         ax2.plot(detail["date"], ret, color="forestgreen", lw=2, label="定投收益率")
 
-        roll_max = detail["market_value"].expanding().max()
-        dd = (detail["market_value"] - roll_max) / roll_max * 100
+        dd_col = "total_value" if "total_value" in detail.columns else "market_value"
+        roll_max = detail[dd_col].expanding().max()
+        dd = (detail[dd_col] - roll_max) / roll_max * 100
         ax2.fill_between(detail["date"].values, 0, dd.values,
                          alpha=0.25, color="firebrick", label="回撤", step="pre")
 
@@ -382,15 +494,26 @@ def main():
         print("错误：未能生成有效的定投日期")
         sys.exit(1)
 
-    detail, redeem_fee, final_val = simulate_dca(
-        nav_df, invest_dates, args.amount, args.fee
+    stop_profit_on = args.take_profit > 0 or args.trailing_stop > 0
+
+    detail, events, redeem_fee, final_val = simulate_dca(
+        nav_df, invest_dates, args.amount, args.fee,
+        take_profit=args.take_profit if args.take_profit > 0 else None,
+        tp_cycle=args.tp_cycle,
+        trailing_stop=args.trailing_stop if args.trailing_stop > 0 else None,
     )
 
-    total_invest = detail.iloc[-1]["total_cost"]
-    final_val_before = detail.iloc[-1]["market_value"]
+    if stop_profit_on:
+        total_invest = detail.iloc[-1]["total_value"] - detail.iloc[-1]["profit"]
+        portfolio_value = detail.iloc[-1]["total_value"]
+    else:
+        total_invest = detail.iloc[-1]["total_cost"]
+        portfolio_value = detail.iloc[-1]["market_value"]
+
     total_ret = (final_val - total_invest) / total_invest
     ann_ret = calc_annualized(total_ret, pd.Timestamp(args.start), pd.Timestamp(end_date))
-    mdd = max_drawdown(detail["market_value"])
+    value_col = "total_value" if stop_profit_on else "market_value"
+    mdd = max_drawdown(detail[value_col])
 
     lumpsum = calc_lumpsum(
         nav_df, total_invest, args.start, end_date, args.fee
@@ -408,7 +531,7 @@ def main():
 
 {'─' * 52}
 总投入:        {total_invest:>12,.2f} 元
-期末市值:      {final_val_before:>12,.2f} 元
+期末市值:      {portfolio_value:>12,.2f} 元
 赎回费:        {redeem_fee:>12,.2f} 元
 实际到账:      {final_val:>12,.2f} 元
 总收益率:      {total_ret * 100:>12.2f}%
@@ -426,10 +549,33 @@ def main():
         print(f"  差值:        {diff * 100:>+12.2f}%  ({winner})")
     print(sep)
 
-    print()
+    # ── 止盈事件输出 ──
+    if events:
+        print(f"\n止盈事件（共 {len(events)} 次）:")
+        print(f"{'#':>3} {'日期':<12} {'净值':>8} {'收益率':>8} {'盈利':>10} {'赎回费':>8} {'原因'}")
+        print("─" * 70)
+        for i, e in enumerate(events, 1):
+            print(
+                f"{i:>3} {e['date'].strftime('%Y-%m-%d'):<12} {e['nav']:>8.4f} "
+                f"{e['return_rate'] * 100:>7.2f}% {e['profit']:>10.2f} "
+                f"{e['redeem_fee']:>8.2f} {e['reason']}"
+            )
+        total_event_profit = sum(e["profit"] for e in events)
+        total_event_fee = sum(e["redeem_fee"] for e in events)
+        print(f"{'─' * 70}")
+        print(f"{'合计':>3} {'':<12} {'':>8} {'':>8} {total_event_profit:>10.2f} {total_event_fee:>8.2f}")
+        print()
+
+    # ── 交易明细（无止盈时显示全部；有止盈时仅显示定投日和止盈日） ──
+    if stop_profit_on:
+        event_dates = {e["date"] for e in events}
+        display_detail = detail[(detail["investment"] > 0) | detail["date"].isin(event_dates)].copy()
+    else:
+        display_detail = detail
+
     print(f"{'日期':<12} {'净值':>8} {'投入':>8} {'份额':>8} {'累计份额':>10} {'市值':>10} {'收益率':>8}")
     print("─" * 70)
-    for _, r in detail.iterrows():
+    for _, r in display_detail.iterrows():
         print(
             f"{r['date'].strftime('%Y-%m-%d'):<12} {r['nav']:>8.4f} "
             f"{r['investment']:>8.0f} {r['units_added']:>8.2f} "
@@ -439,7 +585,7 @@ def main():
     print("─" * 70)
     print(
         f"{'合计':<12} {'':>8} {total_invest:>8.0f} {'':>8} "
-        f"{detail.iloc[-1]['total_units']:>10.2f} "
+        f"{display_detail.iloc[-1]['total_units']:>10.2f} "
         f"{final_val:>10.2f} {total_ret * 100:>7.2f}%"
     )
 
