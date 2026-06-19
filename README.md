@@ -29,7 +29,7 @@
 
 ```bash
 # 克隆或进入项目目录
-cd fund_dca_backtest
+cd fundkit
 
 # 创建虚拟环境（可选）
 python -m venv venv
@@ -135,7 +135,7 @@ python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01 \
 ## 项目结构
 
 ```
-fund_dca_backtest/
+fundkit/
 ├── dca_backtest.py      # CLI 主程序
 ├── app.py               # Streamlit 图形界面
 ├── requirements.txt     # Python 依赖

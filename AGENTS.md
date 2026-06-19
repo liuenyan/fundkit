@@ -1,4 +1,4 @@
-# AGENTS.md — fund_dca_backtest
+# AGENTS.md — fundkit
 
 Single-file Python CLI for DCA (定投) backtesting of Chinese open-end funds.
 
