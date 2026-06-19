@@ -11,9 +11,12 @@
 - **赎回费**：按持有期限阶梯费率计算（默认：<7 天 1.5%、7–30 天 0.75%、30–365 天 0.5%、1–2 年 0.25%、≥2 年 0%）
 - **一次性投入对比**：将等额资金一次性投入的收益与定投收益进行对比
 - **收益率计算**：总收益率、年化收益率、最大回撤
-- **图表输出**：自动生成双面板 PNG 图表（净值走势 & 定投成本 / 定投收益率 & 回撤）
+- **图表输出**：自动生成双面板 PNG/Streamlit 图表（净值走势 & 定投成本 / 定投收益率 & 回撤）
 - **CSV 导出**：支持将定投明细导出为 CSV
 - **基金名称识别**：自动识别并显示基金简称
+- **两种止盈策略**：
+  - **A 目标止盈**：收益率达目标即卖出，可选循环
+  - **B 停投持有+移动止盈**：收益率达标后停投持有，回撤超阈值再卖出，可选循环
 
 ## 安装
 
@@ -39,8 +42,18 @@ pip install -r requirements.txt
 
 ## 使用方法
 
+### 命令行
+
 ```bash
 python dca_backtest.py --fund <基金代码> --amount <每期金额> [选项]
+```
+
+### 图形界面
+
+```bash
+streamlit run app.py
+# 或
+python -m streamlit run app.py
 ```
 
 ### 参数说明
@@ -55,15 +68,19 @@ python dca_backtest.py --fund <基金代码> --amount <每期金额> [选项]
 | `--day` | 否 | 每月定投日 1–28（仅 `monthly` 有效，默认 10） |
 | `--weekday` | 否 | 每周定投日 1=周一..5=周五（仅 `weekly` / `biweekly` 有效，默认 1） |
 | `--fee` | 否 | 申购费率（默认 0.0015 = 0.15%） |
+| `--take-profit` | 否 | **策略A** 目标止盈收益率（如 `0.20` 表示收益 20% 即卖出） |
+| `--tp-cycle` | 否 | **策略A** 循环止盈模式（止盈后重新开始定投） |
+| `--stop-invest` | 否 | **策略B** 停投触发收益率（如 `0.20` 表示收益 20% 即停投） |
+| `--trailing-stop` | 否 | **策略B** 移动止盈回撤阈值（如 `0.08` 表示回撤 8% 即卖出） |
 | `--output` | 否 | CSV 导出路径 |
 | `--chart` | 否 | 图表输出目录（默认 `./charts`） |
 
 ### 示例
 
-**月度定投**：每月 10 日定投招商中证白酒指数基金 1000 元，2018 年至 2025 年：
+**月度定投**：每月 10 日定投兴全商业模式 1000 元，2018 年至今：
 
 ```bash
-python dca_backtest.py --fund 161725 --amount 1000 --start 2018-01-01 --end 2025-12-31
+python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01
 ```
 
 **周定投**：每周一定投 500 元：
@@ -72,16 +89,18 @@ python dca_backtest.py --fund 161725 --amount 1000 --start 2018-01-01 --end 2025
 python dca_backtest.py --fund 161725 --amount 500 --freq weekly --start 2020-01-01
 ```
 
-**双周定投**：每两周周四定投：
+**策略A：目标止盈**，收益达 20% 即卖出，循环：
 
 ```bash
-python dca_backtest.py --fund 161725 --amount 500 --freq biweekly --weekday 4 --start 2020-01-01
+python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01 \
+  --take-profit 0.20 --tp-cycle
 ```
 
-**每日定投**：
+**策略B：停投持有+移动止盈**，收益达 20% 停投，回撤 8% 卖出，循环：
 
 ```bash
-python dca_backtest.py --fund 161725 --amount 100 --freq daily --start 2023-01-01
+python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01 \
+  --stop-invest 0.20 --trailing-stop 0.08
 ```
 
 ## 输出说明
@@ -90,6 +109,7 @@ python dca_backtest.py --fund 161725 --amount 100 --freq daily --start 2023-01-0
 
 - 回测摘要：总投入、期末市值、赎回费、实际到账、总收益率、年化收益率、最大回撤
 - 一次性投入对比：同等金额一次性投入的最终价值、收益率，并与定投结果比较胜负
+- 止盈事件表（启用策略时）：每次止盈的日期、净值、收益率、盈利、赎回费、原因
 - 逐期明细表：每期日期、净值、投入金额、获得份额、累计份额、市值、收益率
 
 ### 图表输出
@@ -116,8 +136,10 @@ python dca_backtest.py --fund 161725 --amount 100 --freq daily --start 2023-01-0
 
 ```
 fund_dca_backtest/
-├── dca_backtest.py      # 主程序
+├── dca_backtest.py      # CLI 主程序
+├── app.py               # Streamlit 图形界面
 ├── requirements.txt     # Python 依赖
+├── AGENTS.md            # AI 助手上下文说明
 ├── README.md            # 本文件
 └── charts/              # 图表输出目录（自动创建）
 ```
@@ -128,3 +150,4 @@ fund_dca_backtest/
 - pandas — 数据处理
 - matplotlib — 图表绘制
 - numpy — 数值计算
+- streamlit — 图形界面（可选，仅 `app.py` 需要）
