@@ -15,16 +15,26 @@ from valuation import fetch_series_all as _fetch_series
 from valuation import fetch_bond_yield_10y, fetch_dividend_yield
 from valuation import rolling_percentile, get_label
 from cjk_font import setup_cjk_font
+from cache import clear_cache
 
 st.set_page_config(page_title="指数估值", page_icon="📈", layout="centered")
 
 st.title("📈 指数估值百分位")
 st.markdown("数据来源：中证指数 / 乐咕乐股（via AKShare）· 需联网")
 
-if st.button("🔄 刷新估值", type="primary", use_container_width=True):
-    with st.spinner("正在获取指数估值数据..."):
-        st.session_state["val_data"] = _fetch_valuation()
-        st.session_state["val_series"] = _fetch_series()
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🔄 刷新估值", type="primary", use_container_width=True):
+        with st.spinner("正在获取指数估值数据..."):
+            st.session_state["val_data"] = _fetch_valuation()
+            st.session_state["val_series"] = _fetch_series()
+with col2:
+    if st.button("🗑️ 清除缓存并刷新", type="secondary", use_container_width=True):
+        with st.spinner("正在清除缓存并重新获取..."):
+            clear_cache()
+            st.session_state["val_data"] = _fetch_valuation()
+            st.session_state["val_series"] = _fetch_series()
+            st.success("缓存已清除，数据已刷新")
 
 if "val_data" not in st.session_state:
     st.info("👈 点击「刷新估值」获取最新数据")
