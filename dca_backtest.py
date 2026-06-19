@@ -65,11 +65,13 @@ def parse_args():
     p.add_argument("--chart", default="./charts", help="图表输出目录")
 
     p.add_argument("--take-profit", type=float, default=0,
-                   help="目标止盈收益率 (如 0.20 表示收益达 20%% 即卖出)")
-    p.add_argument("--trailing-stop", type=float, default=0,
-                   help="移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)")
+                   help="【策略A】目标止盈收益率 (如 0.20 表示收益达 20%% 即卖出)")
     p.add_argument("--tp-cycle", action="store_true",
-                   help="循环止盈模式（止盈后重新开始定投）")
+                   help="【策略A】循环止盈模式（止盈后重新开始定投）")
+    p.add_argument("--stop-invest", type=float, default=0,
+                   help="【策略B】停投触发收益率 (如 0.20 表示收益达 20%% 即停投，配合 --trailing-stop 使用)")
+    p.add_argument("--trailing-stop", type=float, default=0,
+                   help="【策略B】移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)")
     return p.parse_args()
 
 
@@ -182,12 +184,19 @@ def get_redeem_rate(hold_days, schedule=None):
 
 
 def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=None,
-                 take_profit=None, tp_cycle=False, trailing_stop=None):
-    """执行定投模拟（支持止盈策略）"""
-    nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
-    stop_profit_on = take_profit is not None or trailing_stop is not None
+                 take_profit=None, tp_cycle=False,
+                 stop_invest=None, trailing_stop=None):
+    """执行定投模拟
 
-    # ── 无止盈策略：保留原始逻辑（仅定投日） ──
+    策略A（目标止盈）: take_profit — 收益达目标即卖出，可选 tp_cycle 循环
+    策略B（停投持有+移动止盈）: stop_invest + trailing_stop — 收益达标停投，回撤达标卖出，始终循环
+    """
+    nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
+    strategy_a = take_profit is not None
+    strategy_b = stop_invest is not None and trailing_stop is not None
+    stop_profit_on = strategy_a or strategy_b
+
+    # ── 无止盈策略 ──
     if not stop_profit_on:
         records = []
         total_units = 0.0
@@ -222,20 +231,20 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
         final_val = detail.iloc[-1]["market_value"] - total_redeem_fee
         return detail, [], total_redeem_fee, final_val
 
-    # ── 有止盈策略：按交易日遍历，检查止盈条件 ──
+    # ── 有止盈策略 ──
     all_dates = nav_df["date"].values
     invest_set = set(invest_dates)
 
     records = []
     events = []
 
-    total_units = 0.0        # 当前轮次持有份额
-    round_cost = 0.0         # 当前轮次投入总额
-    total_invested = 0.0     # 全部轮次累计投入
-    total_recovered = 0.0    # 止盈到账总额（本金+收益）
-    is_active = True         # 是否继续定投
+    total_units = 0.0
+    round_cost = 0.0
+    total_invested = 0.0
+    total_recovered = 0.0
+    is_active = True
     peak_return = -float("inf")
-    fee_batches = []         # 每笔申购记录，用于计算赎回费
+    fee_batches = []
 
     for d in all_dates:
         date = pd.Timestamp(d)
@@ -263,17 +272,21 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
             market_value = 0.0
             round_return = 0.0
 
-        if round_return > peak_return:
+        if total_units > 0 and round_return > peak_return:
             peak_return = round_return
 
-        # ── 止盈检查 ──
+        # ── 策略检查 ──
         should_sell = False
         sell_reason = ""
-        if total_units > 0:
-            if take_profit is not None and round_return >= take_profit:
-                should_sell = True
-                sell_reason = f"目标收益率 {take_profit*100:.0f}%"
-            if trailing_stop is not None and peak_return >= trailing_stop and round_return <= peak_return - trailing_stop:
+
+        if strategy_a and total_units > 0 and round_return >= take_profit:
+            should_sell = True
+            sell_reason = f"目标收益率 {take_profit*100:.0f}%"
+
+        if strategy_b:
+            if total_units > 0 and round_return >= stop_invest:
+                is_active = False
+            if not is_active and total_units > 0 and peak_return >= trailing_stop and round_return <= peak_return - trailing_stop:
                 should_sell = True
                 sell_reason = f"移动止盈（回撤 {trailing_stop*100:.0f}%）"
 
@@ -301,7 +314,9 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
             round_return = 0.0
             peak_return = -float("inf")
             fee_batches = []
-            if not tp_cycle:
+            if tp_cycle:
+                is_active = True
+            else:
                 is_active = False
 
         # ── 整体组合指标 ──
@@ -494,13 +509,16 @@ def main():
         print("错误：未能生成有效的定投日期")
         sys.exit(1)
 
-    stop_profit_on = args.take_profit > 0 or args.trailing_stop > 0
+    strategy_a = args.take_profit > 0
+    strategy_b = args.stop_invest > 0 and args.trailing_stop > 0
+    stop_profit_on = strategy_a or strategy_b
 
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df, invest_dates, args.amount, args.fee,
-        take_profit=args.take_profit if args.take_profit > 0 else None,
+        take_profit=args.take_profit if strategy_a else None,
         tp_cycle=args.tp_cycle,
-        trailing_stop=args.trailing_stop if args.trailing_stop > 0 else None,
+        stop_invest=args.stop_invest if strategy_b else None,
+        trailing_stop=args.trailing_stop if strategy_b else None,
     )
 
     if stop_profit_on:
