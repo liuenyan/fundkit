@@ -17,18 +17,17 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 - **Data source**: [AKShare](https://github.com/akfamily/akshare) → 天天基金网, **requires internet**
 - **No tests**: no test framework, no CI, no lint/typecheck config
 - **Chart output**: `./charts/<fund_code>_dca_backtest.png` (Auto, `matplotlib.use("Agg")`)
-- **CJK fonts**: auto-detected via `_setup_cjk_font()` — falls back gracefully if missing
+- **CJK fonts**: `cjk_font.py` — `setup_cjk_font()` via `mpl.font_manager.findfont`
 - **Backtest core**: `simulate_dca()` at line 184, returns `(detail_df, events_list, redeem_fee, final_val)`
 - **Two stop-profit strategies**:
   - **A**: `--take-profit` + `--tp-cycle` (目标止盈，达阈值即卖出)
   - **B**: `--stop-invest` + `--trailing-stop` (停投持有+移动止盈，回撤卖出后自动循环)
 
-## Streamlit UI (`app.py`)
+## Streamlit UI (`app.py` + `app_pages/`)
 
-- Wraps `dca_backtest.py` core functions with `safe_call()` to catch `sys.exit` → `st.error`
-- Reuses `fetch_fund_data`, `simulate_dca`, `generate_dca_dates`, `calc_lumpsum` etc.
-- Custom `make_charts()` returns matplotlib figure (does NOT save to file)
-- Sidebar controls → `st.button("开始回测")` → all metrics/charts/tables in main panel
+- `app.py` → 导航中枢 (`st.navigation`)，两个页面：
+  - `app_pages/dca.py` → 定投回测 (`/dca`)
+  - `app_pages/valuation.py` → 指数估值 (`/valuation`)
 
 ## Architecture
 
@@ -41,6 +40,13 @@ main()
 ├─ calc_lumpsum()          # lump-sum comparison
 └─ plot_results()          # matplotlib (2-panel chart)
 ```
+
+## Streamlit UI — 指数估值 (`app_pages/valuation.py`)
+- 百分位曲线 (PE/PB, 5年/10年滚动, 原始值叠加)
+- 指数点位 & PE 叠加图
+- **中证红利股息率 vs 十年期国债收益率**: 折叠面板，双轴对比图
+  - 国债数据: `bond_zh_us_rate()` → 6109行 (2002~)
+  - 股息率数据: 用 `stock_zh_index_value_csindex("000922")` 快照校准 payout ratio，结合 csindex PE 历史估算 → ~3572行 (2011~)
 
 ## Common args
 

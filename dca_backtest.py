@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from cjk_font import setup_cjk_font
+
 try:
     import akshare as ak
 except ImportError:
@@ -402,43 +404,11 @@ def calc_lumpsum(nav_df, amount, start_date, end_date, purchase_rate, redeem_sch
     }
 
 
-def _setup_cjk_font():
-    """设置中文字体，找到第一个可用的 CJK 字体"""
-    import matplotlib.font_manager as fm
-    import os
-
-    paths = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        os.path.expanduser("~/.fonts/NotoSansSC.ttf"),
-        os.path.expanduser("~/.fonts/wqy-microhei.ttc"),
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            fm.fontManager.addfont(p)
-            break
-
-    prefer = ["Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "Noto Sans CJK"]
-    names = {f.name for f in fm.fontManager.ttflist}
-    for want in prefer:
-        for n in names:
-            if want in n:
-                plt.rcParams["font.family"] = n
-                return n
-    # fallback: any font with CJK keywords
-    for n in names:
-        if any(kw in n.lower() for kw in ["cjk", "hei", "song", "ming", "noto"]):
-            plt.rcParams["font.family"] = n
-            return n
-    return None
-
-
 def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, chart_dir):
     """生成分析图表"""
     os.makedirs(chart_dir, exist_ok=True)
 
-    _setup_cjk_font()
-    plt.rcParams["axes.unicode_minus"] = False
+    setup_cjk_font()
 
     assert not nav_df.empty, "nav_df 为空"
     assert "unit_nav" in nav_df.columns, f"nav_df 缺少 unit_nav: {list(nav_df.columns)}"
