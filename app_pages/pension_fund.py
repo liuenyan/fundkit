@@ -61,9 +61,10 @@ def _fmt_scale(v):
 
 
 def _fmt_total_fee(row):
-    buy = row.get("买入费率_天天")
+    buy = row.get("申购费")
     mgmt = row.get("管理费")
     cust = row.get("托管费")
+    sales = row.get("销售服务费")
     total = row.get("综合费率")
     parts = []
     if pd.notna(total):
@@ -77,6 +78,8 @@ def _fmt_total_fee(row):
         detail.append(f"管{_fmt_pct(mgmt)}")
     if pd.notna(cust):
         detail.append(f"托{_fmt_pct(cust)}")
+    if pd.notna(sales):
+        detail.append(f"销{_fmt_pct(sales)}")
     if detail:
         parts.append("(" + "+".join(detail) + ")")
     return " ".join(parts)
@@ -118,20 +121,20 @@ for i, (_, row) in enumerate(result.iterrows()):
 with st.expander("📋 完整列表", expanded=False):
     detail_cols = ["基金代码", "基金名称", "养老金分类", "基金类型",
                    "单位净值", "净值日期", "日增长率",
-                   "买入费率_天天", "管理费", "托管费", "综合费率", "基金规模"]
+                    "申购费", "销售服务费", "管理费", "托管费", "综合费率", "基金规模"]
     detail_map = {
         "基金代码": "代码", "基金名称": "基金名称",
         "养老金分类": "分类", "基金类型": "基金类型",
         "单位净值": "最新净值", "净值日期": "净值日期",
         "日增长率": "日涨跌",
-        "买入费率_天天": "申购费", "管理费": "管理费",
-        "托管费": "托管费", "综合费率": "综合费率",
+        "申购费": "申购费", "销售服务费": "销售服务费",
+        "管理费": "管理费", "托管费": "托管费", "综合费率": "综合费率",
         "基金规模": "基金规模",
     }
     detail_df = result[[c for c in detail_cols if c in result.columns]].copy()
     detail_df["最新净值"] = detail_df["单位净值"].apply(_fmt_nav)
     detail_df["日涨跌"] = detail_df["日增长率"].apply(_fmt_pct)
-    detail_df["申购费"] = detail_df.get("买入费率_天天", pd.Series(dtype=float)).apply(
+    detail_df["申购费"] = detail_df.get("申购费", pd.Series(dtype=float)).apply(
         lambda v: f"{v:.2f}%" if pd.notna(v) else "—"
     )
     detail_df["管理费"] = detail_df["管理费"].apply(_fmt_pct)
@@ -139,7 +142,7 @@ with st.expander("📋 完整列表", expanded=False):
     detail_df["基金规模"] = detail_df["基金规模"].apply(_fmt_scale)
     detail_df["综合费率"] = detail_df.apply(_fmt_total_fee, axis=1)
     display_cols = ["基金代码", "基金名称", "分类", "最新净值", "日涨跌",
-                    "综合费率", "申购费", "管理费", "托管费", "基金规模"]
+                    "综合费率", "申购费", "管理费", "托管费", "销售服务费", "基金规模"]
     st.dataframe(
         detail_df[[c for c in display_cols if c in detail_df.columns]],
         hide_index=True, use_container_width=True,

@@ -90,15 +90,17 @@ funds_meta = Table(
     Column("updated_at", Float),
 )
 
-fund_fees = Table(
-    "fund_fees",
+fund_fee = Table(
+    "fund_fee",
     metadata,
     Column("基金代码", String, primary_key=True),
+    Column("申购费", Float),
     Column("管理费", Float),
     Column("托管费", Float),
+    Column("销售服务费", Float),
+    Column("起购金额", String),
+    Column("综合费率", Float),
     Column("净资产规模", Float),
-    Column("单位净值_fof", Float),
-    Column("净值日期_fof", String),
     Column("updated_at", Float),
 )
 
@@ -114,6 +116,8 @@ fund_catalog = Table(
 
 FUND_CACHE_TTL = 86400  # 24 小时
 CATALOG_TTL = 86400  # 基金名录默认 TTL
+FEE_TTL = 7776000  # 费率缓存 90 天
+SCALE_TTL = 86400  # 规模缓存 24 小时
 
 
 # ── 初始化 ──
@@ -122,12 +126,16 @@ CATALOG_TTL = 86400  # 基金名录默认 TTL
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
-    for col in ["净资产规模", "单位净值_fof", "净值日期_fof"]:
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(f"ALTER TABLE fund_fees ADD COLUMN {col}"))
-        except Exception:
-            pass
+    # 迁移: 为 fund_fee 添加净资产规模列（若不存在）
+    try:
+        with engine.connect() as conn:
+            cols = [row[1] for row in conn.execute(
+                text("PRAGMA table_info(fund_fee)")
+            ).fetchall()]
+            if "净资产规模" not in cols:
+                conn.execute(text("ALTER TABLE fund_fee ADD COLUMN 净资产规模 Float"))
+    except Exception:
+        pass
 
 
 # ── 基金缓存 ──
@@ -230,39 +238,42 @@ def is_series_fresh(name, metric, max_age_days=2):
 
 
 def load_fund_fees(codes):
-    """从缓存批量加载费率+规模+FOF净值，返回 {code: {...}}"""
+    """从缓存批量加载费率，返回 {code: {...}}"""
     if not codes:
         return {}
     result = {}
     with engine.connect() as conn:
-        stmt = fund_fees.select().where(fund_fees.c.基金代码.in_(codes))
+        stmt = fund_fee.select().where(fund_fee.c.基金代码.in_(codes))
         rows = conn.execute(stmt).fetchall()
         for r in rows:
             result[r[0]] = {
-                "管理费": r[1],
-                "托管费": r[2],
-                "净资产规模": r[3] if len(r) > 3 else None,
-                "单位净值_fof": r[4] if len(r) > 4 else None,
-                "净值日期_fof": r[5] if len(r) > 5 else None,
+                "申购费": r[1],
+                "管理费": r[2],
+                "托管费": r[3],
+                "销售服务费": r[4] if len(r) > 4 else None,
+                "起购金额": r[5] if len(r) > 5 else None,
+                "综合费率": r[6] if len(r) > 6 else None,
+                "净资产规模": r[7] if len(r) > 7 else None,
             }
     return result
 
 
-def save_fund_fee(code, mgmt, cust, scale=None, nav=None, nav_date=None):
-    """写入单只基金费率+规模+FOF净值缓存"""
+def save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total, scale=None):
+    """写入单只基金费率缓存。scale 为净资产规模（亿元）。"""
     with engine.begin() as conn:
         conn.execute(
-            fund_fees.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code, "管理费": mgmt, "托管费": cust,
-             "净资产规模": scale,
-             "单位净值_fof": nav, "净值日期_fof": nav_date,
+            fund_fee.insert().prefix_with("OR REPLACE"),
+            {"基金代码": code,
+             "申购费": purchase, "管理费": mgmt, "托管费": cust,
+             "销售服务费": sales_service, "起购金额": min_purchase,
+             "综合费率": total, "净资产规模": scale,
              "updated_at": time.time()},
         )
 
 
 def clear_fund_fees():
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM fund_fees"))
+        conn.execute(text("DELETE FROM fund_fee"))
 
 
 # ── 基金名录缓存 ──
@@ -308,10 +319,43 @@ def clear_catalog():
         conn.execute(text("DELETE FROM funds_meta WHERE key='fund_catalog'"))
 
 
+def is_fee_cache_fresh(ttl=None):
+    """检查 fund_fee 缓存是否仍在 TTL 内"""
+    if ttl is None:
+        ttl = FEE_TTL
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT updated_at FROM funds_meta WHERE key='fund_fee'")
+            ).fetchone()
+            if row and row[0]:
+                return time.time() - row[0] < ttl
+    except Exception:
+        pass
+    return False
+
+
+def set_fee_cache_fresh():
+    with engine.begin() as conn:
+        conn.execute(
+            funds_meta.insert().prefix_with("OR REPLACE"),
+            {"key": "fund_fee", "value": "ok", "updated_at": time.time()},
+        )
+
+
+def get_fee_cached_count():
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT COUNT(*) FROM fund_fee")).fetchone()
+            return row[0] if row else 0
+    except Exception:
+        return 0
+
+
 def clear_all():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM index_series"))
         conn.execute(text("DELETE FROM cache_meta"))
         conn.execute(text("DELETE FROM funds"))
         conn.execute(text("DELETE FROM funds_meta"))
-        conn.execute(text("DELETE FROM fund_fees"))
+        conn.execute(text("DELETE FROM fund_fee"))

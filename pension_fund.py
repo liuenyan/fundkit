@@ -112,11 +112,7 @@ def fetch_pension_funds():
 
     result["养老金分类"] = result.apply(classify_pension_category, axis=1)
 
-    try:
-        scale = fund_data.fetch_fund_scale()
-        result = result.merge(scale, on="基金代码", how="left")
-    except Exception:
-        result["基金规模"] = None
+    result["基金规模"] = None
 
     return result
 
