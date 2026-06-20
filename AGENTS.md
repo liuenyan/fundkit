@@ -25,9 +25,11 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 
 ## Streamlit UI (`app.py` + `app_pages/`)
 
-- `app.py` → 导航中枢 (`st.navigation`)，三个页面：
+- `app.py` → 导航中枢 (`st.navigation`)，四个页面：
   - `app_pages/dca.py` → 定投回测 (`/dca`)
   - `app_pages/index_valuation.py` → 指数估值 (`/valuation`)
+  - `app_pages/index_fund.py` → 指数选基 (`/index_fund`)
+  - `app_pages/pension_fund.py` → 养老金选基 (`/pension`)
 
 ## Architecture
 
@@ -40,6 +42,12 @@ main()
 ├─ calc_lumpsum()          # lump-sum comparison
 └─ plot_results()          # matplotlib (2-panel chart)
 ```
+
+## Streamlit UI — 养老金选基 (`app_pages/pension_fund.py`)
+- 筛选 Y 份额基金（个人养老金账户可投资）
+- 分类：指数基金 / FOF-目标日期 / FOF-目标风险（稳健/均衡/积极）
+- 数据源：`fund_name_em` → Y份额筛选 + `fund_open_fund_daily_em`（净值/费率）+ 雪球（管理费/托管费）
+- 排序规则同指数选基页，管理费/托管费通过 `index_fund.fetch_fund_fees` 懒加载（`@st.cache_data` 会话内缓存）
 
 ## Streamlit UI — 指数估值 (`app_pages/index_valuation.py`)
 - 百分位曲线 (PE/PB, 5年/10年滚动, 原始值叠加)
