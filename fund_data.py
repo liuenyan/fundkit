@@ -5,7 +5,6 @@
 
 import concurrent.futures
 import re
-import time
 
 import pandas as pd
 import akshare as ak
@@ -29,44 +28,6 @@ def parse_fee_pct(v):
     except (ValueError, TypeError):
         return None
 
-
-_SCALE_CACHE = None
-_SCALE_CACHE_TIME = 0
-
-
-def fetch_fund_scale():
-    """从新浪获取全市场规模数据 (基金规模 = 单位净值 * 份额 / 1e8, 单位: 亿元)。
-    4 种类型并行调用 + 30s 超时，结果进程内缓存 5 分钟。
-    """
-    global _SCALE_CACHE, _SCALE_CACHE_TIME
-    now = time.time()
-    if _SCALE_CACHE is not None and now - _SCALE_CACHE_TIME < 300:
-        return _SCALE_CACHE
-
-    stypes = ["股票型基金", "混合型基金", "债券型基金", "QDII基金"]
-    parts = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        fut_map = {pool.submit(ak.fund_scale_open_sina, symbol=s): s for s in stypes}
-        try:
-            for f in concurrent.futures.as_completed(fut_map, timeout=35):
-                try:
-                    parts.append(f.result())
-                except Exception:
-                    pass
-        except concurrent.futures.TimeoutError:
-            pass
-
-    if not parts:
-        _SCALE_CACHE = pd.DataFrame(columns=["基金代码", "基金规模"])
-        return _SCALE_CACHE
-    scale_all = pd.concat(parts, ignore_index=True).drop_duplicates(subset="基金代码")
-    scale_col = "最新规模" if "最新规模" in scale_all.columns else "最近总份额"
-    nav = pd.to_numeric(scale_all.get("单位净值", pd.Series(dtype=float)), errors="coerce")
-    shares = pd.to_numeric(scale_all.get(scale_col, pd.Series(dtype=float)), errors="coerce")
-    scale_all["基金规模"] = (nav * shares / 1e8).round(2)
-    _SCALE_CACHE = scale_all[["基金代码", "基金规模"]]
-    _SCALE_CACHE_TIME = now
-    return _SCALE_CACHE
 
 
 
