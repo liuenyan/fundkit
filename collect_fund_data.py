@@ -1,15 +1,15 @@
 """
-批量预采集基金费率数据，写入 DB 缓存。
+批量预采集基金数据（费率 + 净资产规模），写入 DB 缓存。
 TTL: 90 天
 
 数据源:
   1. fund_purchase_em() — 批量获取 申购费 + 起购金额（1 次 API 调用）
-  2. fund_overview_em() — 逐只获取 管理费/托管费/销售服务费（ThreadPoolExecutor 并发）
+  2. fund_overview_em() — 逐只获取 管理费/托管费/销售服务费/净资产规模（ThreadPoolExecutor 并发）
 
 用法:
-  ./venv/bin/python collect_fees.py
-  ./venv/bin/python collect_fees.py --force
-  ./venv/bin/python collect_fees.py --codes 000001,000002  # 指定基金
+  ./venv/bin/python collect_fund_data.py
+  ./venv/bin/python collect_fund_data.py --force
+  ./venv/bin/python collect_fund_data.py --codes 000001,000002  # 指定基金
 """
 
 import argparse
@@ -53,7 +53,7 @@ def fetch_one_fee(code):
         return None
 
 
-def collect(max_workers=10, force=False, codes=None):
+def collect_fund_data(max_workers=10, force=False, codes=None):
     db.init_db()
 
     # ── TTL 检查 ──
@@ -154,7 +154,7 @@ def main():
     if codes:
         codes = [c.strip() for c in codes if c.strip()]
 
-    collect(max_workers=args.workers, force=args.force, codes=codes)
+    collect_fund_data(max_workers=args.workers, force=args.force, codes=codes)
 
 
 if __name__ == "__main__":
