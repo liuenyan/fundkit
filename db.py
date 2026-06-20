@@ -97,6 +97,8 @@ fund_fees = Table(
     Column("管理费", Float),
     Column("托管费", Float),
     Column("净资产规模", Float),
+    Column("单位净值_fof", Float),
+    Column("净值日期_fof", String),
     Column("updated_at", Float),
 )
 
@@ -109,11 +111,12 @@ FUND_CACHE_TTL = 86400  # 24 小时
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE fund_fees ADD COLUMN 净资产规模 FLOAT"))
-    except Exception:
-        pass
+    for col in ["净资产规模", "单位净值_fof", "净值日期_fof"]:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE fund_fees ADD COLUMN {col}"))
+        except Exception:
+            pass
 
 
 # ── 基金缓存 ──
@@ -216,7 +219,7 @@ def is_series_fresh(name, metric, max_age_days=2):
 
 
 def load_fund_fees(codes):
-    """从缓存批量加载费率+规模，返回 {code: {管理费, 托管费, 净资产规模}}"""
+    """从缓存批量加载费率+规模+FOF净值，返回 {code: {...}}"""
     if not codes:
         return {}
     result = {}
@@ -224,17 +227,25 @@ def load_fund_fees(codes):
         stmt = fund_fees.select().where(fund_fees.c.基金代码.in_(codes))
         rows = conn.execute(stmt).fetchall()
         for r in rows:
-            result[r[0]] = {"管理费": r[1], "托管费": r[2], "净资产规模": r[3] if len(r) > 3 else None}
+            result[r[0]] = {
+                "管理费": r[1],
+                "托管费": r[2],
+                "净资产规模": r[3] if len(r) > 3 else None,
+                "单位净值_fof": r[4] if len(r) > 4 else None,
+                "净值日期_fof": r[5] if len(r) > 5 else None,
+            }
     return result
 
 
-def save_fund_fee(code, mgmt, cust, scale=None):
-    """写入单只基金费率+规模缓存"""
+def save_fund_fee(code, mgmt, cust, scale=None, nav=None, nav_date=None):
+    """写入单只基金费率+规模+FOF净值缓存"""
     with engine.begin() as conn:
         conn.execute(
             fund_fees.insert().prefix_with("OR REPLACE"),
             {"基金代码": code, "管理费": mgmt, "托管费": cust,
-             "净资产规模": scale, "updated_at": time.time()},
+             "净资产规模": scale,
+             "单位净值_fof": nav, "净值日期_fof": nav_date,
+             "updated_at": time.time()},
         )
 
 
