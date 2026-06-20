@@ -3,7 +3,7 @@
 ## 性能
 
 - [ ] 首次加载 ~9s：`fund_open_fund_daily_em()` 占 8.5s，好在 `@st.cache_data` 只需查一次
-- [ ] 指数选基页可能也有类似性能问题，需确认是否依赖慢 API
+- [x] 指数选基页：移除 `fund_scale_open_sina()`，规模由 `enrich_fee_scale` 从 DB 缓存读取
 
 ## 数据
 
@@ -12,4 +12,4 @@
 
 ## 代码
 
-- [ ] `fetch_fund_scale()` 函数已无调用方，可删除死代码
+- [x] `fetch_fund_scale()` 函数已无调用方，已删除死代码

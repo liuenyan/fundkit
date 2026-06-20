@@ -90,10 +90,6 @@ def fetch_all_index_funds():
             overseas_df = pd.DataFrame(overseas_rows)
             domestic = pd.concat([domestic, overseas_df], ignore_index=True)
 
-    scale = ak.fund_scale_open_sina()
-    scale = scale[["基金代码", "最近总份额"]].copy()
-    domestic = domestic.merge(scale, on="基金代码", how="left")
-
     db.save_funds(domestic)
     return domestic
 
