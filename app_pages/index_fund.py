@@ -22,20 +22,25 @@ st.set_page_config(page_title="指数选基", page_icon="🎯", layout="centered
 st.title("🎯 指数选基")
 st.markdown("选择一个指数，查看跟踪该指数的所有基金")
 
-query = st.text_input(
-    "搜索指数（输入关键词，如 沪深300、中证白酒、港股通科技）",
-    placeholder="例如：沪深300、中证白酒、科创50",
-    label_visibility="collapsed",
-)
-
-quick = st.selectbox(
-    "或快速选择热门指数",
-    options=COMMON_INDICES,
+CUSTOM_LABEL = "✏️ 自定义搜索…"
+index_choice = st.selectbox(
+    "选择指数",
+    options=[CUSTOM_LABEL] + COMMON_INDICES,
     index=None,
-    placeholder="快速选择热门指数…",
+    placeholder="选择或搜索指数…",
 )
 
-index_name = query.strip() if query.strip() else quick
+if index_choice == CUSTOM_LABEL:
+    custom = st.text_input(
+        "输入指数名称",
+        placeholder="例如：沪深300、中证白酒、科创50",
+        label_visibility="collapsed",
+    )
+    index_name = custom.strip() if custom.strip() else None
+elif index_choice:
+    index_name = index_choice
+else:
+    index_name = None
 
 if index_name:
     with st.spinner(f"正在查询跟踪「{index_name}」的基金…"):
@@ -157,4 +162,4 @@ if index_name:
         detail_df = display[[c for c in detail_cols if c in display.columns]].copy()
         st.dataframe(detail_df, hide_index=True, use_container_width=True)
 else:
-    st.info("👆 输入指数名称或从下拉列表中选择")
+    st.info("👆 从下拉列表选择指数，或选「自定义搜索」输入关键词")
