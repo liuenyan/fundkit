@@ -90,7 +90,11 @@ def make_charts(nav_df, detail, fund_code, fund_name, stop_profit_on):
 with st.sidebar:
     st.header("⚙️ 回测参数")
 
-    fund_code = st.text_input("基金代码（6位）", "163415",
+    params = st.query_params
+    default_code = params.get("fund", "163415")
+    if "fund" in params:
+        del params["fund"]
+    fund_code = st.text_input("基金代码（6位）", default_code, key="fund_code_input",
                               help="例：163415 = 兴全商业模式")
     amount = st.number_input("每期定投金额（元）", 1.0, 1e8, 1000.0, step=100.0)
 

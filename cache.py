@@ -9,7 +9,7 @@ from datetime import datetime, date
 import pandas as pd
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DB_PATH = os.path.join(DATA_DIR, "valuation.db")
+DB_PATH = os.path.join(DATA_DIR, "fundkit.db")
 
 
 def _ensure_dir():
