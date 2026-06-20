@@ -96,6 +96,7 @@ fund_fees = Table(
     Column("基金代码", String, primary_key=True),
     Column("管理费", Float),
     Column("托管费", Float),
+    Column("净资产规模", Float),
     Column("updated_at", Float),
 )
 
@@ -108,6 +109,11 @@ FUND_CACHE_TTL = 86400  # 24 小时
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE fund_fees ADD COLUMN 净资产规模 FLOAT"))
+    except Exception:
+        pass
 
 
 # ── 基金缓存 ──
@@ -210,7 +216,7 @@ def is_series_fresh(name, metric, max_age_days=2):
 
 
 def load_fund_fees(codes):
-    """从缓存批量加载费率，返回 {code: {管理费, 托管费}}"""
+    """从缓存批量加载费率+规模，返回 {code: {管理费, 托管费, 净资产规模}}"""
     if not codes:
         return {}
     result = {}
@@ -218,16 +224,17 @@ def load_fund_fees(codes):
         stmt = fund_fees.select().where(fund_fees.c.基金代码.in_(codes))
         rows = conn.execute(stmt).fetchall()
         for r in rows:
-            result[r[0]] = {"管理费": r[1], "托管费": r[2]}
+            result[r[0]] = {"管理费": r[1], "托管费": r[2], "净资产规模": r[3] if len(r) > 3 else None}
     return result
 
 
-def save_fund_fee(code, mgmt, cust):
-    """写入单只基金费率缓存"""
+def save_fund_fee(code, mgmt, cust, scale=None):
+    """写入单只基金费率+规模缓存"""
     with engine.begin() as conn:
         conn.execute(
             fund_fees.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code, "管理费": mgmt, "托管费": cust, "updated_at": time.time()},
+            {"基金代码": code, "管理费": mgmt, "托管费": cust,
+             "净资产规模": scale, "updated_at": time.time()},
         )
 
 

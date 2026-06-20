@@ -47,18 +47,37 @@ def fetch_fund_scale():
     return scale_all
 
 
+def _parse_scale(s):
+    if not s:
+        return None
+    s = str(s).strip()
+    try:
+        if "亿" in s:
+            m = re.search(r"([\d.]+)\s*亿", s)
+            return float(m.group(1)) if m else None
+        if "万" in s:
+            m = re.search(r"([\d.]+)\s*万", s)
+            v = float(m.group(1)) if m else None
+            return round(v / 10000, 4) if v else None
+        m = re.search(r"([\d.]+)", s)
+        return float(m.group(1)) if m else None
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 def _fetch_mgmt_cust_from_eastmoney(code):
-    """从天天基金 fund_overview_em 获取管理费/托管费"""
+    """从天天基金 fund_overview_em 获取管理费/托管费/净资产规模"""
     try:
         df = ak.fund_overview_em(symbol=code)
         if df.empty:
-            return None, None
+            return None, None, None
         row = df.iloc[0]
         mgmt = parse_fee_pct(row.get("管理费率"))
         cust = parse_fee_pct(row.get("托管费率"))
-        return mgmt, cust
+        scale = _parse_scale(row.get("净资产规模"))
+        return mgmt, cust, scale
     except Exception:
-        return None, None
+        return None, None, None
 
 
 def _fetch_mgmt_cust_from_xueqiu(code):
@@ -73,18 +92,19 @@ def _fetch_mgmt_cust_from_xueqiu(code):
                 mgmt = v
             if "托管费" in cond:
                 cust = v
-        return mgmt, cust
+        return mgmt, cust, None
     except Exception:
-        return None, None
+        return None, None, None
 
 
 def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
-    """批量获取管理费和托管费。
+    """批量获取管理费/托管费/净资产规模。
     优先级: DB 缓存 → 天天基金 → 雪球兜底
-    返回 {code: {管理费, 托管费}}
+    返回 (mgmt_map, cust_map, scale_map)
     """
     mgmt_map = {}
     cust_map = {}
+    scale_map = {}
 
     cached = db.load_fund_fees(codes)
     uncached = []
@@ -92,6 +112,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         if c in cached:
             mgmt_map[c] = cached[c]["管理费"]
             cust_map[c] = cached[c]["托管费"]
+            scale_map[c] = cached[c].get("净资产规模")
         else:
             uncached.append(c)
 
@@ -103,39 +124,53 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         if progress_placeholder:
             progress_placeholder.markdown(f"正在获取费率信息… ({i+1}/{total})")
 
-        mgmt, cust = _fetch_mgmt_cust_from_eastmoney(c)
+        mgmt, cust, scale = _fetch_mgmt_cust_from_eastmoney(c)
 
         if mgmt is None:
-            mgmt, cust = _fetch_mgmt_cust_from_xueqiu(c)
+            mgmt, cust, scale = _fetch_mgmt_cust_from_xueqiu(c)
 
         mgmt_map[c] = mgmt
         cust_map[c] = cust
-        db.save_fund_fee(c, mgmt, cust)
+        scale_map[c] = scale
+        db.save_fund_fee(c, mgmt, cust, scale)
 
-    return mgmt_map, cust_map
+    return mgmt_map, cust_map, scale_map
 
 
 def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
     """通用费率/规模补充。result 须含 基金代码 单位净值 手续费 列。
-    scale_source: 外部规模 DataFrame 或 None（自动获取）
+    scale_source: 外部规模 DataFrame 或 None（已含在 result 中则跳过）
     """
     result = result.copy()
 
     nav = pd.to_numeric(result.get("单位净值"), errors="coerce")
-    if scale_source is not None:
-        scale_map = scale_source.set_index("基金代码")["基金规模"].to_dict()
-        result["基金规模"] = result["基金代码"].map(scale_map)
+    codes = result["基金代码"].tolist()
+    mgmt_map, cust_map, scale_map = fetch_mgmt_cust_fees(codes, progress_placeholder)
+
+    if "基金规模" in result.columns:
+        missing = result["基金规模"].isna()
+        if missing.any():
+            result.loc[missing, "基金规模"] = (
+                result.loc[missing, "基金代码"].map(scale_map)
+            )
+    elif scale_source is not None:
+        s_map = scale_source.set_index("基金代码")["基金规模"].to_dict()
+        result["基金规模"] = result["基金代码"].map(s_map)
     elif "最近总份额" in result.columns:
         shares = pd.to_numeric(result["最近总份额"], errors="coerce")
         result["基金规模"] = (nav * shares / 1e8).round(2)
     else:
-        result["基金规模"] = None
+        result["基金规模"] = result["基金代码"].map(scale_map)
+
+    missing_fill = result["基金规模"].isna()
+    if missing_fill.any():
+        result.loc[missing_fill, "基金规模"] = (
+            result.loc[missing_fill, "基金代码"].map(scale_map)
+        )
 
     fee_raw = result["手续费"].astype(str).str.replace("%", "", regex=False)
     result["买入费率_天天"] = pd.to_numeric(fee_raw, errors="coerce")
 
-    codes = result["基金代码"].tolist()
-    mgmt_map, cust_map = fetch_mgmt_cust_fees(codes, progress_placeholder)
     result["管理费"] = result["基金代码"].map(mgmt_map)
     result["托管费"] = result["基金代码"].map(cust_map)
 
