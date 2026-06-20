@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import akshare as ak
 
-from cache import get_or_update_series
+import db
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -145,6 +145,40 @@ def _fetch_index_price_lg(param):
 
 
 # ── 缓存感知的数据获取 ──
+
+
+def get_or_update_series(name, metric, source, fetch_fn):
+    """
+    返回 (DataFrame, 是否命中缓存)。
+
+    如果缓存新鲜则直接返回缓存；否则调用 fetch_fn() 获取全量数据，
+    新老合并后写入缓存再返回。
+    """
+    db.init_db()
+
+    if db.is_series_fresh(name, metric):
+        df = db.load_series(name, metric)
+        return df, True
+
+    try:
+        df_raw = fetch_fn()
+    except Exception:
+        df_raw = None
+    if df_raw is None or df_raw.empty:
+        db.set_cache_meta(name, metric, source + ":failed")
+        cached = db.load_series(name, metric)
+        return cached, True
+
+    db.upsert_series(name, metric, df_raw)
+    db.set_cache_meta(name, metric, source)
+
+    df = db.load_series(name, metric)
+    return df, False
+
+
+def clear_cache():
+    db.clear_all()
+
 
 def _get_series(cfg, metric="pe"):
     name = cfg["name"]

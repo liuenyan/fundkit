@@ -10,12 +10,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from valuation import fetch_all as _fetch_valuation
-from valuation import fetch_series_all as _fetch_series
-from valuation import fetch_bond_yield_10y, fetch_dividend_yield
-from valuation import rolling_percentile, get_label
+from index_valuation import fetch_all as _fetch_valuation
+from index_valuation import fetch_series_all as _fetch_series
+from index_valuation import fetch_bond_yield_10y, fetch_dividend_yield
+from index_valuation import rolling_percentile, get_label
 from cjk_font import setup_cjk_font
-from cache import clear_cache
+from index_valuation import clear_cache
 
 st.set_page_config(page_title="指数估值", page_icon="📈", layout="centered")
 

@@ -25,9 +25,9 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 
 ## Streamlit UI (`app.py` + `app_pages/`)
 
-- `app.py` → 导航中枢 (`st.navigation`)，两个页面：
+- `app.py` → 导航中枢 (`st.navigation`)，三个页面：
   - `app_pages/dca.py` → 定投回测 (`/dca`)
-  - `app_pages/valuation.py` → 指数估值 (`/valuation`)
+  - `app_pages/index_valuation.py` → 指数估值 (`/valuation`)
 
 ## Architecture
 
@@ -41,7 +41,7 @@ main()
 └─ plot_results()          # matplotlib (2-panel chart)
 ```
 
-## Streamlit UI — 指数估值 (`app_pages/valuation.py`)
+## Streamlit UI — 指数估值 (`app_pages/index_valuation.py`)
 - 百分位曲线 (PE/PB, 5年/10年滚动, 原始值叠加)
 - 指数点位 & PE 叠加图
 - **中证红利股息率 vs 十年期国债收益率**: 折叠面板，双轴对比图

@@ -3,17 +3,13 @@
 数据源: 天天基金网 (via AKShare)
 """
 
-import os
 import re
-import sqlite3
-import time
 
 import pandas as pd
 import akshare as ak
 import streamlit as st
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "fundkit.db")
-CACHE_TTL = 86400  # 24 小时
+import db
 
 COMMON_INDICES = [
     # ── 宽基 ──
@@ -47,46 +43,11 @@ COMMON_INDICES = [
 ]
 
 
-def _init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("CREATE TABLE IF NOT EXISTS funds_meta (key TEXT PRIMARY KEY, value TEXT, updated_at REAL)")
-    conn.commit()
-    conn.close()
-
-
-def _cache_fresh():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        row = conn.execute("SELECT updated_at FROM funds_meta WHERE key='funds'").fetchone()
-        conn.close()
-        if row is None:
-            return False
-        return time.time() - row[0] < CACHE_TTL
-    except Exception:
-        return False
-
-
-def _load_from_cache():
-    try:
-        return pd.read_sql("SELECT * FROM funds", sqlite3.connect(DB_PATH))
-    except Exception:
-        return None
-
-
-def _save_to_cache(df):
-    conn = sqlite3.connect(DB_PATH)
-    df.to_sql("funds", conn, if_exists="replace", index=False)
-    conn.execute("INSERT OR REPLACE INTO funds_meta (key, value, updated_at) VALUES (?, ?, ?)",
-                 ("funds", "ok", time.time()))
-    conn.commit()
-    conn.close()
-
-
 @st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
 def fetch_all_index_funds():
-    _init_db()
-    if _cache_fresh():
-        cached = _load_from_cache()
+    db.init_db()
+    if db.is_funds_cache_fresh():
+        cached = db.load_funds()
         if cached is not None:
             return cached
 
@@ -129,7 +90,7 @@ def fetch_all_index_funds():
     scale = scale[["基金代码", "最近总份额"]].copy()
     domestic = domestic.merge(scale, on="基金代码", how="left")
 
-    _save_to_cache(domestic)
+    db.save_funds(domestic)
     return domestic
 
 
