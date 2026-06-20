@@ -100,6 +100,13 @@ fund_fee = Table(
     Column("销售服务费", Float),
     Column("起购金额", String),
     Column("综合费率", Float),
+    Column("updated_at", Float),
+)
+
+fund_scale = Table(
+    "fund_scale",
+    metadata,
+    Column("基金代码", String, primary_key=True),
     Column("净资产规模", Float),
     Column("updated_at", Float),
 )
@@ -126,14 +133,19 @@ SCALE_TTL = 86400  # 规模缓存 24 小时
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
-    # 迁移: 为 fund_fee 添加净资产规模列（若不存在）
+    # 迁移: fund_fee → fund_scale 拆分
     try:
         with engine.connect() as conn:
             cols = [row[1] for row in conn.execute(
                 text("PRAGMA table_info(fund_fee)")
             ).fetchall()]
-            if "净资产规模" not in cols:
-                conn.execute(text("ALTER TABLE fund_fee ADD COLUMN 净资产规模 Float"))
+            if "净资产规模" in cols:
+                conn.execute(text("""
+                    INSERT OR IGNORE INTO fund_scale (基金代码, 净资产规模, updated_at)
+                    SELECT 基金代码, 净资产规模, updated_at FROM fund_fee
+                    WHERE 净资产规模 IS NOT NULL
+                """))
+                conn.execute(text("ALTER TABLE fund_fee DROP COLUMN 净资产规模"))
     except Exception:
         pass
 
@@ -250,23 +262,22 @@ def load_fund_fees(codes):
                 "申购费": r[1],
                 "管理费": r[2],
                 "托管费": r[3],
-                "销售服务费": r[4] if len(r) > 4 else None,
-                "起购金额": r[5] if len(r) > 5 else None,
-                "综合费率": r[6] if len(r) > 6 else None,
-                "净资产规模": r[7] if len(r) > 7 else None,
+                "销售服务费": r[4],
+                "起购金额": r[5],
+                "综合费率": r[6],
             }
     return result
 
 
-def save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total, scale=None):
-    """写入单只基金费率缓存。scale 为净资产规模（亿元）。"""
+def save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total):
+    """写入单只基金费率缓存。"""
     with engine.begin() as conn:
         conn.execute(
             fund_fee.insert().prefix_with("OR REPLACE"),
             {"基金代码": code,
              "申购费": purchase, "管理费": mgmt, "托管费": cust,
              "销售服务费": sales_service, "起购金额": min_purchase,
-             "综合费率": total, "净资产规模": scale,
+             "综合费率": total,
              "updated_at": time.time()},
         )
 
@@ -274,6 +285,36 @@ def save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total
 def clear_fund_fees():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM fund_fee"))
+
+
+# ── 基金规模缓存 ──
+
+
+def load_fund_scale(codes):
+    """从 fund_scale 表批量加载净资产规模，返回 {code: value}"""
+    if not codes:
+        return {}
+    result = {}
+    with engine.connect() as conn:
+        stmt = fund_scale.select().where(fund_scale.c.基金代码.in_(codes))
+        rows = conn.execute(stmt).fetchall()
+        for r in rows:
+            result[r[0]] = r[1]
+    return result
+
+
+def save_fund_scale(code, scale):
+    """写入单只基金净资产规模。"""
+    with engine.begin() as conn:
+        conn.execute(
+            fund_scale.insert().prefix_with("OR REPLACE"),
+            {"基金代码": code, "净资产规模": scale, "updated_at": time.time()},
+        )
+
+
+def clear_fund_scale():
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM fund_scale"))
 
 
 # ── 基金名录缓存 ──
@@ -359,3 +400,4 @@ def clear_all():
         conn.execute(text("DELETE FROM funds"))
         conn.execute(text("DELETE FROM funds_meta"))
         conn.execute(text("DELETE FROM fund_fee"))
+        conn.execute(text("DELETE FROM fund_scale"))

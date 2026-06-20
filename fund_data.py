@@ -95,6 +95,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
 
     # ── 从 DB 缓存读取 ──
     cached = db.load_fund_fees(codes)
+    scale_map = db.load_fund_scale(codes)
     uncached = []
     for c in codes:
         if c in cached:
@@ -105,7 +106,6 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
                 sales_service_map[c] = entry["销售服务费"]
                 purchase_map[c] = entry["申购费"]
                 min_purchase_map[c] = entry["起购金额"]
-                scale_map[c] = entry["净资产规模"]
                 continue
         uncached.append(c)
 
@@ -159,6 +159,8 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
                 )
                 db.save_fund_fee(code, purchase, mgmt, cust, sales_service,
                                  min_purchase, total_fee)
+                if scale is not None:
+                    db.save_fund_scale(code, scale)
 
             if progress_placeholder:
                 pct = int(done / total * 100) if total else 100

@@ -117,8 +117,10 @@ def collect(max_workers=10, force=False, codes=None):
                 )
                 db.save_fund_fee(
                     code, purchase, mgmt, cust, sales_service,
-                    min_purchase, total_fee, scale
+                    min_purchase, total_fee,
                 )
+                if scale is not None:
+                    db.save_fund_scale(code, scale)
                 success += 1
 
             elapsed = time.time() - t0
