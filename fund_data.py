@@ -173,8 +173,8 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
 
     nav = pd.to_numeric(result.get("单位净值"), errors="coerce")
     codes = result["基金代码"].tolist()
-    missing_nav = result.index[result["单位净值"].isna()].tolist()
-    missing_nav_codes = result.iloc[missing_nav]["基金代码"].tolist() if missing_nav else []
+    missing_nav_mask = result["单位净值"].isna()
+    missing_nav_codes = result.loc[missing_nav_mask, "基金代码"].tolist() if missing_nav_mask.any() else []
 
     mgmt_map, cust_map, scale_map, nav_map, nav_date_map = fetch_mgmt_cust_fees(
         codes, progress_placeholder, missing_nav=missing_nav_codes
