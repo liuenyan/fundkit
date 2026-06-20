@@ -122,7 +122,8 @@ def fetch_fund_data(fund_code, start_date, end_date):
 def fetch_fund_name(fund_code):
     """获取基金简称"""
     try:
-        df = ak.fund_name_em()
+        import fund_catalog
+        df = fund_catalog.get_catalog()
         row = df[df["基金代码"] == fund_code]
         if not row.empty:
             return row.iloc[0]["基金简称"]

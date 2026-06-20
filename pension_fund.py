@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 import db
+import fund_catalog
 import fund_data
 
 SORT_OPTIONS = fund_data.SORT_OPTIONS
@@ -48,13 +49,13 @@ PENSION_CATEGORIES = [
 def fetch_pension_funds():
     db.init_db()
 
-    names = ak.fund_name_em()
+    names = fund_catalog.get_catalog()
     y_mask = names["基金简称"].str.contains(r"Y$|Y类", na=False, regex=True)
-    y_funds = names[y_mask].copy()
+    y_funds = names[y_mask][["基金代码", "基金简称", "基金类型"]].copy()
+    y_funds = y_funds.rename(columns={"基金简称": "基金名称"})
 
+    # 开放基金净值（覆盖指数基金，不覆盖FOF）
     daily = ak.fund_open_fund_daily_em()
-    merged = y_funds.merge(daily, on="基金代码", how="left", suffixes=("", "_daily"))
-
     nav_cols = [c for c in daily.columns if "单位净值" in c]
     nav_col = nav_cols[0] if nav_cols else None
     date_str = nav_col.split("-单位净值")[0] if nav_col else ""
@@ -64,32 +65,51 @@ def fetch_pension_funds():
             date_str = f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
             break
 
-    result_rows = []
-    for _, r in merged.iterrows():
-        nav = None
-        if nav_col and r.get(nav_col) and str(r[nav_col]).strip():
-            try:
-                nav = float(r[nav_col])
-            except (ValueError, TypeError):
-                pass
+    daily_slim = pd.DataFrame({
+        "基金代码": daily["基金代码"],
+        "单位净值": pd.to_numeric(daily[nav_col], errors="coerce") if nav_col else None,
+        "净值日期": date_str,
+        "日增长率": daily.get("日增长率", ""),
+        "手续费": pd.to_numeric(
+            daily.get("手续费", pd.Series(dtype=str)).astype(str).str.replace("%", "", regex=False),
+            errors="coerce",
+        ),
+    })
 
-        fee_raw = str(r.get("手续费", "")).replace("%", "")
-        try:
-            fee_val = float(fee_raw)
-        except (ValueError, TypeError):
-            fee_val = None
+    result = y_funds.merge(daily_slim, on="基金代码", how="left")
 
-        result_rows.append({
-            "基金代码": r["基金代码"],
-            "基金名称": r.get("基金简称", r.get("基金简称_daily", "")),
-            "基金类型": r["基金类型"],
-            "单位净值": nav,
-            "净值日期": date_str,
-            "日增长率": r.get("日增长率", ""),
-            "手续费": fee_val,
-        })
+    # FOF排名数据（覆盖FOF Y份额，含净值/区间收益率/手续费）
+    fof_rank = ak.fund_open_fund_rank_em(symbol="FOF")
+    fof_rank = fof_rank.rename(columns={
+        "单位净值": "单位净值_fof",
+        "日期": "净值日期_fof",
+        "日增长率": "日增长率_fof",
+        "手续费": "手续费_fof",
+    })
+    fof_cols = ["基金代码", "单位净值_fof", "净值日期_fof", "日增长率_fof", "手续费_fof",
+                "累计净值", "近1周", "近1月", "近3月", "近6月",
+                "近1年", "近2年", "近3年", "今年来", "成立来"]
+    fof_cols = [c for c in fof_cols if c in fof_rank.columns]
+    fof_slim = fof_rank[fof_cols].copy()
 
-    result = pd.DataFrame(result_rows)
+    # 归一化 FOF 手续费为数值
+    if "手续费_fof" in fof_slim.columns:
+        fof_slim["手续费_fof"] = pd.to_numeric(
+            fof_slim["手续费_fof"].astype(str).str.replace("%", "", regex=False),
+            errors="coerce",
+        )
+
+    result = result.merge(fof_slim, on="基金代码", how="left")
+
+    # Coalesce: daily → fof
+    result["单位净值"] = result["单位净值"].fillna(result["单位净值_fof"])
+    result["净值日期"] = result["净值日期"].fillna(result["净值日期_fof"])
+    result["日增长率"] = result["日增长率"].fillna(result["日增长率_fof"])
+    result["手续费"] = result["手续费"].fillna(result["手续费_fof"])
+
+    drop_cols = [c for c in result.columns if c.endswith("_fof")]
+    result = result.drop(columns=drop_cols)
+
     result["养老金分类"] = result.apply(classify_pension_category, axis=1)
 
     try:

@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 import db
+import fund_catalog
 import fund_data
 
 COMMON_INDICES = [
@@ -58,7 +59,7 @@ def fetch_all_index_funds():
     domestic = domestic[[c for c in domestic.columns if c != "-"]].copy()
     domestic_codes = set(domestic["基金代码"])
 
-    name_df = ak.fund_name_em()
+    name_df = fund_catalog.get_catalog()
     overseas_idx = name_df[name_df["基金类型"].str.contains("指数型-海外", na=False)]
     overseas_codes = set(overseas_idx["基金代码"]) - domestic_codes
 

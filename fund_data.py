@@ -97,35 +97,14 @@ def _fetch_mgmt_cust_from_xueqiu(code):
         return None, None, None
 
 
-def _fetch_nav_from_fund_info(code):
-    """从 fund_open_fund_info_em 获取 FOF 基金最新净值, 返回 (nav, date)"""
-    try:
-        nav_df = ak.fund_open_fund_info_em(symbol=code, indicator="单位净值走势")
-        if nav_df.empty:
-            return None, None
-        row = nav_df.iloc[-1]
-        date_val = row.get("净值日期", str(row.iloc[0]))
-        nav_cols = [c for c in nav_df.columns if "单位净值" in c]
-        nav_val = float(row[nav_cols[0]]) if nav_cols else None
-        if isinstance(date_val, (int, float)):
-            from datetime import datetime
-            date_val = datetime.fromtimestamp(date_val / 1000).strftime("%Y-%m-%d") if date_val > 1e9 else str(int(date_val))
-        return nav_val, str(date_val)
-    except Exception:
-        return None, None
-
-
-def fetch_mgmt_cust_fees(codes, progress_placeholder=None, missing_nav=()):
-    """批量获取管理费/托管费/净资产规模/FOF净值。
+def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
+    """批量获取管理费/托管费/净资产规模。
     优先级: DB 缓存 → 天天基金 → 雪球兜底
-    返回 (mgmt_map, cust_map, scale_map, nav_map, nav_date_map)
+    返回 (mgmt_map, cust_map, scale_map)
     """
     mgmt_map = {}
     cust_map = {}
     scale_map = {}
-    nav_map = {}
-    nav_date_map = {}
-    missing_nav_set = set(missing_nav)
 
     cached = db.load_fund_fees(codes)
     uncached = []
@@ -134,8 +113,6 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None, missing_nav=()):
             mgmt_map[c] = cached[c]["管理费"]
             cust_map[c] = cached[c]["托管费"]
             scale_map[c] = cached[c].get("净资产规模")
-            nav_map[c] = cached[c].get("单位净值_fof")
-            nav_date_map[c] = cached[c].get("净值日期_fof")
         else:
             uncached.append(c)
 
@@ -151,34 +128,24 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None, missing_nav=()):
         if mgmt is None:
             mgmt, cust, scale = _fetch_mgmt_cust_from_xueqiu(c)
 
-        nav_fof = nav_date_fof = None
-        if c in missing_nav_set:
-            nav_fof, nav_date_fof = _fetch_nav_from_fund_info(c)
-
         mgmt_map[c] = mgmt
         cust_map[c] = cust
         scale_map[c] = scale
-        nav_map[c] = nav_fof
-        nav_date_map[c] = nav_date_fof
-        db.save_fund_fee(c, mgmt, cust, scale, nav_fof, nav_date_fof)
+        db.save_fund_fee(c, mgmt, cust, scale)
 
-    return mgmt_map, cust_map, scale_map, nav_map, nav_date_map
+    return mgmt_map, cust_map, scale_map
 
 
 def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
-    """通用费率/规模/净值补充。result 须含 基金代码 单位净值 手续费 列。
+    """通用费率/规模补充。result 须含 基金代码 单位净值 手续费 列。
     scale_source: 外部规模 DataFrame 或 None（已含在 result 中则跳过）
     """
     result = result.copy()
 
     nav = pd.to_numeric(result.get("单位净值"), errors="coerce")
     codes = result["基金代码"].tolist()
-    missing_nav_mask = result["单位净值"].isna()
-    missing_nav_codes = result.loc[missing_nav_mask, "基金代码"].tolist() if missing_nav_mask.any() else []
 
-    mgmt_map, cust_map, scale_map, nav_map, nav_date_map = fetch_mgmt_cust_fees(
-        codes, progress_placeholder, missing_nav=missing_nav_codes
-    )
+    mgmt_map, cust_map, scale_map = fetch_mgmt_cust_fees(codes, progress_placeholder)
 
     if "基金规模" in result.columns:
         missing = result["基金规模"].isna()
@@ -201,17 +168,23 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
             result.loc[missing_fill, "基金代码"].map(scale_map)
         )
 
-    # 补充 FOF 基金缺失的单位净值
-    nav_missing = result["单位净值"].isna()
-    if nav_missing.any():
-        filled_nav = result.loc[nav_missing, "基金代码"].map(nav_map)
-        result.loc[nav_missing, "单位净值"] = filled_nav
-        fof_date = result.loc[nav_missing, "基金代码"].map(nav_date_map)
-        if "净值日期" in result.columns:
-            existing = result.loc[nav_missing, "净值日期"]
-            result.loc[nav_missing, "净值日期"] = fof_date.where(fof_date.notna(), existing)
-        else:
-            result.loc[nav_missing, "净值日期"] = fof_date
+    # 兜底: 仍缺失净值的基金（如新成立FOF不在rank API中）从 fund_open_fund_info_em 逐只获取
+    nav_still_missing = result["单位净值"].isna()
+    if nav_still_missing.any():
+        for idx in result.index[nav_still_missing]:
+            code = result.at[idx, "基金代码"]
+            try:
+                nav_df = ak.fund_open_fund_info_em(symbol=code, indicator="单位净值走势")
+                if not nav_df.empty:
+                    row = nav_df.iloc[-1]
+                    nav_c = [c for c in nav_df.columns if "单位净值" in c]
+                    if nav_c:
+                        result.at[idx, "单位净值"] = float(row[nav_c[0]])
+                    date_c = [c for c in nav_df.columns if "日期" in c or "date" in c.lower()]
+                    if date_c:
+                        result.at[idx, "净值日期"] = str(row[date_c[0]])
+            except Exception:
+                pass
 
     fee_raw = result["手续费"].astype(str).str.replace("%", "", regex=False)
     result["买入费率_天天"] = pd.to_numeric(fee_raw, errors="coerce")

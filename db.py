@@ -102,7 +102,18 @@ fund_fees = Table(
     Column("updated_at", Float),
 )
 
+fund_catalog = Table(
+    "fund_catalog",
+    metadata,
+    Column("基金代码", String, primary_key=True),
+    Column("拼音缩写", String),
+    Column("基金简称", String),
+    Column("基金类型", String),
+    Column("拼音全称", String),
+)
+
 FUND_CACHE_TTL = 86400  # 24 小时
+CATALOG_TTL = 86400  # 基金名录默认 TTL
 
 
 # ── 初始化 ──
@@ -252,6 +263,49 @@ def save_fund_fee(code, mgmt, cust, scale=None, nav=None, nav_date=None):
 def clear_fund_fees():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM fund_fees"))
+
+
+# ── 基金名录缓存 ──
+
+
+def load_catalog():
+    """从 fund_catalog 表加载基金名录，返回 DataFrame 或 None"""
+    try:
+        return pd.read_sql(text("SELECT * FROM fund_catalog"), engine)
+    except Exception:
+        return None
+
+
+def save_catalog(df):
+    """写入基金名录到 fund_catalog 表并记录 TTL"""
+    df.to_sql("fund_catalog", engine, if_exists="replace", index=False)
+    with engine.begin() as conn:
+        conn.execute(
+            funds_meta.insert().prefix_with("OR REPLACE"),
+            {"key": "fund_catalog", "value": "ok", "updated_at": time.time()},
+        )
+
+
+def is_catalog_fresh(ttl=None):
+    """检查 fund_catalog 缓存是否仍在 TTL 内"""
+    if ttl is None:
+        ttl = CATALOG_TTL
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT updated_at FROM funds_meta WHERE key='fund_catalog'")
+            ).fetchone()
+            if row and row[0]:
+                return time.time() - row[0] < ttl
+    except Exception:
+        pass
+    return False
+
+
+def clear_catalog():
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM fund_catalog"))
+        conn.execute(text("DELETE FROM funds_meta WHERE key='fund_catalog'"))
 
 
 def clear_all():
