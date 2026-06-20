@@ -10,7 +10,7 @@ import akshare as ak
 import streamlit as st
 
 import db
-from index_fund import SORT_OPTIONS, fetch_fund_fees
+from index_fund import SORT_OPTIONS
 
 
 def classify_pension_category(row):
@@ -112,16 +112,62 @@ def filter_pension_funds(df, category):
     return df[df["养老金分类"] == category].copy()
 
 
-def enrich_pension_fees(result):
+def _fetch_fee_from_xq(code):
+    try:
+        df = ak.fund_individual_detail_info_xq(symbol=code)
+        mgmt = cust = None
+        for _, r in df.iterrows():
+            cond = str(r.get("条件或名称", "")).strip()
+            v = _parse_fee_val(r.get("费用"))
+            if "管理费" in cond:
+                mgmt = v
+            if "托管费" in cond:
+                cust = v
+        return mgmt, cust
+    except Exception:
+        return None, None
+
+
+def _parse_fee_val(v):
+    if v is None:
+        return None
+    try:
+        return float(str(v).replace("%", "").strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def enrich_pension_fees(result, progress_placeholder=None):
     result = result.copy()
 
     fee_raw = result["手续费"].astype(str).str.replace("%", "", regex=False)
     result["买入费率_天天"] = pd.to_numeric(fee_raw, errors="coerce")
 
     codes = result["基金代码"].tolist()
-    fees = fetch_fund_fees(codes)
-    result["管理费"] = result["基金代码"].map(lambda c: fees.get(c, {}).get("管理费"))
-    result["托管费"] = result["基金代码"].map(lambda c: fees.get(c, {}).get("托管费"))
+    cached = db.load_fund_fees(codes)
+
+    mgmt_map = {}
+    cust_map = {}
+    uncached = []
+
+    for c in codes:
+        if c in cached:
+            mgmt_map[c] = cached[c]["管理费"]
+            cust_map[c] = cached[c]["托管费"]
+        else:
+            uncached.append(c)
+
+    total = len(uncached)
+    for i, c in enumerate(uncached):
+        if progress_placeholder:
+            progress_placeholder.markdown(f"正在获取费率信息… ({i+1}/{total})")
+        mgmt, cust = _fetch_fee_from_xq(c)
+        mgmt_map[c] = mgmt
+        cust_map[c] = cust
+        db.save_fund_fee(c, mgmt, cust)
+
+    result["管理费"] = result["基金代码"].map(mgmt_map)
+    result["托管费"] = result["基金代码"].map(cust_map)
 
     buy = result["买入费率_天天"].fillna(0)
     mgmt = result["管理费"]

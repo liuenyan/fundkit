@@ -93,7 +93,9 @@ with st.spinner("获取养老金基金数据…"):
 
 cat = None if category == "全部" else category
 result = filter_pension_funds(all_funds, cat)
-result = enrich_pension_fees(result)
+progress_msg = st.empty()
+result = enrich_pension_fees(result, progress_placeholder=progress_msg)
+progress_msg.empty()
 result = sort_pension_funds(result, sort_by)
 
 st.success(f"共 {len(result)} 只基金")

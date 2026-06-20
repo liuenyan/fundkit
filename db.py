@@ -90,6 +90,15 @@ funds_meta = Table(
     Column("updated_at", Float),
 )
 
+fund_fees = Table(
+    "fund_fees",
+    metadata,
+    Column("基金代码", String, primary_key=True),
+    Column("管理费", Float),
+    Column("托管费", Float),
+    Column("updated_at", Float),
+)
+
 FUND_CACHE_TTL = 86400  # 24 小时
 
 
@@ -197,9 +206,40 @@ def is_series_fresh(name, metric, max_age_days=2):
 # ── 清空 ──
 
 
+# ── 基金费率缓存 ──
+
+
+def load_fund_fees(codes):
+    """从缓存批量加载费率，返回 {code: {管理费, 托管费}}"""
+    if not codes:
+        return {}
+    result = {}
+    with engine.connect() as conn:
+        stmt = fund_fees.select().where(fund_fees.c.基金代码.in_(codes))
+        rows = conn.execute(stmt).fetchall()
+        for r in rows:
+            result[r[0]] = {"管理费": r[1], "托管费": r[2]}
+    return result
+
+
+def save_fund_fee(code, mgmt, cust):
+    """写入单只基金费率缓存"""
+    with engine.begin() as conn:
+        conn.execute(
+            fund_fees.insert().prefix_with("OR REPLACE"),
+            {"基金代码": code, "管理费": mgmt, "托管费": cust, "updated_at": time.time()},
+        )
+
+
+def clear_fund_fees():
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM fund_fees"))
+
+
 def clear_all():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM index_series"))
         conn.execute(text("DELETE FROM cache_meta"))
         conn.execute(text("DELETE FROM funds"))
         conn.execute(text("DELETE FROM funds_meta"))
+        conn.execute(text("DELETE FROM fund_fees"))
