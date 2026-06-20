@@ -58,7 +58,7 @@ if index_name:
     with fcol1:
         fund_type = st.selectbox("基金类型", ["全部", "ETF联接", "指数增强", "普通指数型"])
     with fcol2:
-        share_class = st.selectbox("份额类别", ["全部", "A类", "C类", "其他"])
+        share_class = st.selectbox("份额类别", ["全部", "A类", "C类", "E类", "Y类", "其他"])
     with fcol3:
         sort_by = st.selectbox("排序方式", options=list(SORT_OPTIONS.keys()), index=0)
 

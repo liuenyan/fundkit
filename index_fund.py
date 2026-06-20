@@ -165,6 +165,10 @@ def fetch_fund_fees(codes):
 
 def classify_share_class(name):
     name_upper = str(name).upper().rstrip("①②③④⑤⑥⑦⑧⑨⑩")
+    if name_upper.endswith("Y") or "Y类" in name_upper:
+        return "Y类"
+    if name_upper.endswith("E") or "E类" in name_upper:
+        return "E类"
     if name_upper.endswith("A") or "A类" in name_upper:
         return "A类"
     if name_upper.endswith("C") or "C类" in name_upper:
