@@ -5,11 +5,12 @@
 
 import re
 
-import pandas as pd
 import akshare as ak
+import pandas as pd
 import streamlit as st
 
 import db
+import fund_data
 
 COMMON_INDICES = [
     # ── 宽基 ──
@@ -118,49 +119,7 @@ def _tokenize(query):
     return [t for t in tokens if t]
 
 
-SORT_OPTIONS = {
-    "默认": None,
-    "综合费率从低到高": ("综合费率", True),
-    "综合费率从高到低": ("综合费率", False),
-    "规模从大到小": ("基金规模", False),
-    "规模从小到大": ("基金规模", True),
-}
-
-
-def _parse_fee_val(v):
-    """解析雪球费用值，返回 float（百分比数值）"""
-    if v is None:
-        return None
-    try:
-        return float(str(v).replace("%", "").strip())
-    except (ValueError, TypeError):
-        return None
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def _fetch_mgmt_cust(code):
-    """从雪球获取单只基金的管理费和托管费。"""
-    try:
-        df = ak.fund_individual_detail_info_xq(symbol=code)
-        result = {"管理费": None, "托管费": None}
-        for _, r in df.iterrows():
-            cond = str(r.get("条件或名称", "")).strip()
-            v = _parse_fee_val(r.get("费用"))
-            if "管理费" in cond:
-                result["管理费"] = v
-            if "托管费" in cond:
-                result["托管费"] = v
-        return result
-    except Exception:
-        return {"管理费": None, "托管费": None}
-
-
-def fetch_fund_fees(codes):
-    """批量获取管理费和托管费，返回 {code: {管理费, 托管费}}"""
-    fees = {}
-    for code in codes:
-        fees[code] = _fetch_mgmt_cust(code)
-    return fees
+SORT_OPTIONS = fund_data.SORT_OPTIONS
 
 
 def classify_share_class(name):
@@ -195,42 +154,11 @@ def filter_funds(df, fund_type=None, share_class=None):
 
 
 def enrich_fee_scale(result):
-    """对搜索结果补充费率和规模信息"""
-    result = result.copy()
-    nav = pd.to_numeric(result["单位净值"], errors="coerce")
-    shares = pd.to_numeric(result["最近总份额"], errors="coerce")
-    result["基金规模"] = (nav * shares / 1e8).round(2)
-
-    fee_raw = result["手续费"].astype(str).str.replace("%", "", regex=False)
-    result["买入费率_天天"] = pd.to_numeric(fee_raw, errors="coerce")
-
-    codes = result["基金代码"].tolist()
-    fees = fetch_fund_fees(codes)
-    result["管理费"] = result["基金代码"].map(lambda c: fees.get(c, {}).get("管理费"))
-    result["托管费"] = result["基金代码"].map(lambda c: fees.get(c, {}).get("托管费"))
-
-    buy = result["买入费率_天天"].fillna(0)
-    mgmt = result["管理费"]
-    cust = result["托管费"]
-    result["综合费率"] = ((buy + mgmt + cust).round(2)).where(
-        mgmt.notna() & cust.notna(), pd.NA
-    )
-    return result
+    return fund_data.enrich_fee_scale(result)
 
 
 def sort_result(result, sort_by):
-    sort_config = SORT_OPTIONS.get(sort_by) if sort_by else None
-    if sort_config:
-        col, asc = sort_config
-        if col == "综合费率":
-            result = result.sort_values("综合费率", ascending=asc)
-        elif col == "基金规模":
-            result = result.sort_values("基金规模", ascending=asc)
-    else:
-        result["_name_len"] = result["基金名称"].str.len()
-        result = result.sort_values("_name_len")
-    drop_cols = [c for c in result.columns if c.startswith("_")]
-    return result.drop(columns=drop_cols).reset_index(drop=True)
+    return fund_data.sort_result(result, sort_by)
 
 
 def search_funds_by_index(df, index_name, sort_by=None):
