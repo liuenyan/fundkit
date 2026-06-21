@@ -58,30 +58,6 @@ cache_meta = Table(
     PrimaryKeyConstraint("name", "metric"),
 )
 
-funds = Table(
-    "funds",
-    metadata,
-    Column("基金代码", String, primary_key=True),
-    Column("基金名称", String),
-    Column("单位净值", Float),
-    Column("日期", String),
-    Column("日增长率", String),
-    Column("近1周", String),
-    Column("近1月", String),
-    Column("近3月", String),
-    Column("近6月", String),
-    Column("近1年", String),
-    Column("近2年", String),
-    Column("近3年", String),
-    Column("今年来", String),
-    Column("成立来", String),
-    Column("手续费", Float),
-    Column("起购金额", String),
-    Column("跟踪标的", String),
-    Column("跟踪方式", String),
-    Column("最近总份额", Float),
-)
-
 funds_meta = Table(
     "funds_meta",
     metadata,
@@ -149,7 +125,6 @@ fund_nav = Table(
     Column("updated_at", Float),
 )
 
-FUND_CACHE_TTL = 86400  # 24 小时
 CATALOG_TTL = 86400  # 基金名录默认 TTL
 FEE_TTL = 7776000  # 费率缓存 90 天
 SCALE_TTL = 86400  # 规模缓存 24 小时
@@ -203,38 +178,6 @@ def init_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fund_nav_code ON fund_nav(基金代码)"))
     except Exception:
         pass
-
-
-# ── 基金缓存 ──
-
-
-def load_funds():
-    try:
-        return pd.read_sql(text("SELECT * FROM funds"), engine)
-    except Exception:
-        return None
-
-
-def save_funds(df):
-    df.to_sql("funds", engine, if_exists="replace", index=False)
-    with engine.begin() as conn:
-        conn.execute(
-            funds_meta.insert().prefix_with("OR REPLACE"),
-            {"key": "funds", "value": "ok", "updated_at": time.time()},
-        )
-
-
-def is_funds_cache_fresh():
-    try:
-        with engine.connect() as conn:
-            row = conn.execute(
-                text("SELECT updated_at FROM funds_meta WHERE key='funds'")
-            ).fetchone()
-            if row and row[0]:
-                return time.time() - row[0] < FUND_CACHE_TTL
-    except Exception:
-        pass
-    return False
 
 
 # ── 估值序列缓存 ──
@@ -550,8 +493,7 @@ def clear_all():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM index_series"))
         conn.execute(text("DELETE FROM cache_meta"))
-        conn.execute(text("DELETE FROM funds"))
-        conn.execute(text("DELETE FROM funds_meta"))
+        conn.execute(text("DELETE FROM funds_meta WHERE key LIKE 'fund%' OR key LIKE 'index%'"))
         conn.execute(text("DELETE FROM fund_fee"))
         conn.execute(text("DELETE FROM fund_scale"))
         conn.execute(text("DELETE FROM fund_nav"))

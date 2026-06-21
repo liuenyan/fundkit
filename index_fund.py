@@ -5,12 +5,10 @@
 
 import re
 
-import akshare as ak
 import pandas as pd
 import streamlit as st
 
 import db
-import fund_catalog
 import fund_data
 
 COMMON_INDICES = [
@@ -50,11 +48,11 @@ COMMON_INDICES = [
 @st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
 def fetch_all_index_funds():
     db.init_db()
-    if db.is_fund_nav_fresh():
-        cached = _load_index_funds_from_db()
-        if cached is not None:
-            return cached
-    return _fetch_index_funds_from_api()
+    result = _load_index_funds_from_db()
+    if result is not None and not result.empty:
+        return result
+    st.error("净值数据尚未采集，请运行：`./venv/bin/python collect_fund_data.py --nav`")
+    return pd.DataFrame()
 
 
 def _load_index_funds_from_db():
@@ -83,61 +81,6 @@ def _load_index_funds_from_db():
         return result
     except Exception:
         return None
-
-
-def _fetch_index_funds_from_api():
-    """API 降级路径：直接从 AKShare 获取"""
-    domestic = ak.fund_info_index_em(symbol="全部", indicator="全部")
-    domestic = domestic[[c for c in domestic.columns if c != "-"]].copy()
-
-    db.init_db()
-    profile_codes = domestic["基金代码"].tolist()
-    profile_map = db.load_fund_profile(profile_codes)
-    for i, code in enumerate(domestic["基金代码"]):
-        info = profile_map.get(code)
-        if info:
-            if info.get("跟踪方式"):
-                domestic.at[i, "跟踪方式"] = info["跟踪方式"]
-            if info.get("跟踪标的"):
-                domestic.at[i, "跟踪标的"] = info["跟踪标的"]
-        if domestic.at[i, "跟踪方式"] in ("全部", "", None):
-            name = domestic.at[i, "基金名称"]
-            domestic.at[i, "跟踪方式"] = "增强指数型" if "增强" in str(name) else "被动指数型"
-
-    domestic_codes = set(domestic["基金代码"])
-    name_df = fund_catalog.get_catalog()
-    overseas_idx = name_df[name_df["基金类型"].str.contains("指数型-海外", na=False)]
-    overseas_codes = set(overseas_idx["基金代码"]) - domestic_codes
-
-    if overseas_codes:
-        daily = ak.fund_open_fund_daily_em()
-        daily_overseas = daily[daily["基金代码"].isin(overseas_codes)].copy()
-        if not daily_overseas.empty:
-            nav_col = [c for c in daily_overseas.columns if "单位净值" in c][0]
-            date_str = nav_col.split("-单位净值")[0]
-            for sep in ("-", "/", "."):
-                parts = date_str.split(sep)
-                if len(parts) == 3:
-                    date_str = f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
-                    break
-            overseas_rows = []
-            for _, r in daily_overseas.iterrows():
-                overseas_rows.append({
-                    "基金代码": r["基金代码"],
-                    "基金名称": r["基金简称"],
-                    "单位净值": float(r[nav_col]) if r[nav_col] and str(r[nav_col]).replace(".", "", 1).isdigit() else None,
-                    "日期": date_str,
-                    "日增长率": r["日增长率"],
-                    "手续费": r["手续费"],
-                    "起购金额": "",
-                    "跟踪标的": "",
-                    "跟踪方式": "被动指数型",
-                })
-            overseas_df = pd.DataFrame(overseas_rows)
-            domestic = pd.concat([domestic, overseas_df], ignore_index=True)
-
-    db.save_funds(domestic)
-    return domestic
 
 
 def _tokenize(query):
