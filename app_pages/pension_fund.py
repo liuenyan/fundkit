@@ -11,7 +11,6 @@ from backend.pension_fund import (
     SORT_OPTIONS,
     fetch_pension_funds,
     filter_pension_funds,
-    enrich_pension_fees,
     sort_pension_funds,
 )
 
@@ -96,9 +95,6 @@ with st.spinner("获取养老金基金数据…"):
 
 cat = None if category == "全部" else category
 result = filter_pension_funds(all_funds, cat)
-progress_msg = st.empty()
-result = enrich_pension_fees(result, progress_placeholder=progress_msg)
-progress_msg.empty()
 result = sort_pension_funds(result, sort_by)
 
 st.success(f"共 {len(result)} 只基金")

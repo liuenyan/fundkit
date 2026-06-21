@@ -402,6 +402,40 @@ def load_index_fund_nav():
         return None
 
 
+def load_pension_funds():
+    """JOIN fund_catalog + fund_nav + fund_fee + fund_scale
+    返回 Y 份额基金净值+费率+规模——单次查询，无需后续 enrich_fee_scale。"""
+    try:
+        with engine.connect() as conn:
+            return pd.read_sql(
+                text("""
+                SELECT
+                    cat.基金代码,
+                    cat.基金简称 AS 基金名称,
+                    cat.基金类型,
+                    nav.单位净值,
+                    nav.累计净值,
+                    nav.日增长率,
+                    nav.日期 AS 净值日期,
+                    fee.申购费,
+                    fee.管理费,
+                    fee.托管费,
+                    fee.销售服务费,
+                    fee.综合费率,
+                    fee.起购金额,
+                    scale.净资产规模 AS 基金规模
+                FROM fund_catalog cat
+                LEFT JOIN fund_nav nav ON cat.基金代码 = nav.基金代码
+                LEFT JOIN fund_fee fee ON cat.基金代码 = fee.基金代码
+                LEFT JOIN fund_scale scale ON cat.基金代码 = scale.基金代码
+                WHERE cat.基金简称 LIKE '%Y' OR cat.基金简称 LIKE '%Y类%'
+            """),
+                conn,
+            )
+    except Exception:
+        return None
+
+
 # ── 基金基本信息缓存 ──
 
 
