@@ -338,6 +338,33 @@ def collect_fund_nav(force=False):
                     etf_added += 1
                 print(f"  → 新增 {etf_added} 只 ETF（{date_str2}）")
 
+    # ── Source 3: fund_open_fund_rank_em(FOF)（补 FOF，覆盖 FOF Y 份额） ──
+    print("Step 3/3 — 获取 FOF 净值（fund_open_fund_rank_em）…")
+    try:
+        fof_df = ak.fund_open_fund_rank_em(symbol="FOF")
+    except Exception as e:
+        print(f"  fund_open_fund_rank_em 调用失败: {e}")
+        fof_df = pd.DataFrame()
+
+    existing_codes = {r["基金代码"] for r in rows}
+    fof_added = 0
+    if not fof_df.empty:
+        for _, r in fof_df.iterrows():
+            code = str(r["基金代码"])
+            if code in existing_codes:
+                continue
+            rows.append({
+                "基金代码": code,
+                "日期": str(r.get("日期", "")),
+                "单位净值": _to_float(r.get("单位净值")),
+                "累计净值": _to_float(r.get("累计净值")),
+                "日增长率": _parse_daily_pct(r.get("日增长率")),
+                "数据来源": "fof",
+                "updated_at": ts,
+            })
+            fof_added += 1
+        print(f"  → 新增 {fof_added} 只 FOF（{fof_df.iloc[0].get('日期', '')}）")
+
     # ── 写入 DB ──
     if not rows:
         print("未采集到任何数据，跳过写入")
