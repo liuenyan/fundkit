@@ -131,6 +131,189 @@ SCALE_TTL = 86400  # 规模缓存 24 小时
 NAV_TTL = 86400  # 净值缓存 24 小时
 
 
+# ── OOP 表访问层 ──
+
+
+class _FundTable:
+    """基金表基类——封装 is_fresh / set_fresh / clear"""
+
+    table: Table
+    meta_key: str | None = None
+    default_ttl: float = 86400
+
+    def _get_update_time(self):
+        if not self.meta_key:
+            return None
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT updated_at FROM funds_meta WHERE key=:key"),
+                {"key": self.meta_key},
+            ).fetchone()
+            return row[0] if row else None
+
+    def is_fresh(self, ttl=None):
+        if not self.meta_key:
+            return False
+        ttl = ttl or self.default_ttl
+        try:
+            ts = self._get_update_time()
+            if ts is not None:
+                return time.time() - ts < ttl
+        except Exception:
+            pass
+        return False
+
+    def set_fresh(self):
+        if not self.meta_key:
+            return
+        with engine.begin() as conn:
+            conn.execute(
+                funds_meta.insert().prefix_with("OR REPLACE"),
+                {"key": self.meta_key, "value": "ok", "updated_at": time.time()},
+            )
+
+    def clear(self):
+        with engine.begin() as conn:
+            conn.execute(text(f"DELETE FROM {self.table.name}"))
+            if self.meta_key:
+                conn.execute(text("DELETE FROM funds_meta WHERE key=:key"), {"key": self.meta_key})
+
+
+class _DictTable(_FundTable):
+    """加载为 {code: dict} 的表 (fund_fee / fund_scale / fund_profile)"""
+
+    def _load_rows(self, codes):
+        if not codes:
+            return {}
+        with engine.connect() as conn:
+            stmt = self.table.select().where(self.table.c.基金代码.in_(codes))
+            return {r[0]: r for r in conn.execute(stmt).fetchall()}
+
+
+class FundFeeTable(_DictTable):
+    table = fund_fee
+    meta_key = "fund_fee"
+    default_ttl = FEE_TTL
+
+    def load(self, codes):
+        rows = self._load_rows(codes)
+        return {
+            code: {
+                "申购费": r[1], "管理费": r[2], "托管费": r[3],
+                "销售服务费": r[4], "起购金额": r[5], "综合费率": r[6],
+            }
+            for code, r in rows.items()
+        }
+
+    def save(self, code, purchase, mgmt, cust, sales_service, min_purchase, total):
+        with engine.begin() as conn:
+            conn.execute(
+                fund_fee.insert().prefix_with("OR REPLACE"),
+                {"基金代码": code, "申购费": purchase, "管理费": mgmt,
+                 "托管费": cust, "销售服务费": sales_service,
+                 "起购金额": min_purchase, "综合费率": total,
+                 "updated_at": time.time()},
+            )
+
+    def cached_count(self):
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(text("SELECT COUNT(*) FROM fund_fee")).fetchone()
+                return row[0] if row else 0
+        except Exception:
+            return 0
+
+
+class FundScaleTable(_DictTable):
+    table = fund_scale
+    meta_key = None
+
+    def load(self, codes):
+        rows = self._load_rows(codes)
+        return {
+            code: {"净资产规模": r[1], "份额规模": r[2]}
+            for code, r in rows.items()
+        }
+
+    def save(self, code, scale, shares=None):
+        with engine.begin() as conn:
+            conn.execute(
+                fund_scale.insert().prefix_with("OR REPLACE"),
+                {"基金代码": code, "净资产规模": scale,
+                 "份额规模": shares, "updated_at": time.time()},
+            )
+
+
+class FundProfileTable(_DictTable):
+    table = fund_profile
+    meta_key = None
+
+    def load(self, codes):
+        rows = self._load_rows(codes)
+        return {
+            code: {
+                "发行日期": r[1], "成立日期": r[2], "基金管理人": r[3],
+                "基金托管人": r[4], "基金经理": r[5], "业绩比较基准": r[6],
+                "跟踪标的": r[7], "跟踪方式": r[8],
+            }
+            for code, r in rows.items()
+        }
+
+    def save(self, code, issue_date, establish_date, mgr, custodian,
+             fund_mgr, benchmark, track_index, track_method=None):
+        with engine.begin() as conn:
+            conn.execute(
+                fund_profile.insert().prefix_with("OR REPLACE"),
+                {"基金代码": code, "发行日期": issue_date,
+                 "成立日期": establish_date, "基金管理人": mgr,
+                 "基金托管人": custodian, "基金经理": fund_mgr,
+                 "业绩比较基准": benchmark, "跟踪标的": track_index,
+                 "跟踪方式": track_method, "updated_at": time.time()},
+            )
+
+    def batch_update_tracking_method(self, method_map):
+        with engine.begin() as conn:
+            for code, method in method_map.items():
+                conn.execute(
+                    text("UPDATE fund_profile SET 跟踪方式 = :method WHERE 基金代码 = :code"),
+                    {"method": method, "code": code},
+                )
+
+
+class _BulkTable(_FundTable):
+    """全表替换的表 (fund_nav / fund_catalog)"""
+
+    def load(self):
+        try:
+            return pd.read_sql(text(f"SELECT * FROM {self.table.name}"), engine)
+        except Exception:
+            return None
+
+    def save(self, df):
+        df.to_sql(self.table.name, engine, if_exists="replace", index=False)
+        self.set_fresh()
+
+
+class FundNavTable(_BulkTable):
+    table = fund_nav
+    meta_key = "fund_nav"
+    default_ttl = NAV_TTL
+
+
+class FundCatalogTable(_BulkTable):
+    table = fund_catalog
+    meta_key = "fund_catalog"
+    default_ttl = CATALOG_TTL
+
+
+# ── 单例实例 ──
+fund_fees = FundFeeTable()
+fund_scale = FundScaleTable()
+fund_profile = FundProfileTable()
+fund_nav = FundNavTable()
+fund_catalog = FundCatalogTable()
+
+
 # ── 初始化 ──
 
 
@@ -242,124 +425,7 @@ def is_series_fresh(name, metric, max_age_days=2):
     return False
 
 
-# ── 清空 ──
-
-
-# ── 基金费率缓存 ──
-
-
-def load_fund_fees(codes):
-    """从缓存批量加载费率，返回 {code: {...}}"""
-    if not codes:
-        return {}
-    result = {}
-    with engine.connect() as conn:
-        stmt = fund_fee.select().where(fund_fee.c.基金代码.in_(codes))
-        rows = conn.execute(stmt).fetchall()
-        for r in rows:
-            result[r[0]] = {
-                "申购费": r[1],
-                "管理费": r[2],
-                "托管费": r[3],
-                "销售服务费": r[4],
-                "起购金额": r[5],
-                "综合费率": r[6],
-            }
-    return result
-
-
-def save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total):
-    """写入单只基金费率缓存。"""
-    with engine.begin() as conn:
-        conn.execute(
-            fund_fee.insert().prefix_with("OR REPLACE"),
-            {
-                "基金代码": code,
-                "申购费": purchase,
-                "管理费": mgmt,
-                "托管费": cust,
-                "销售服务费": sales_service,
-                "起购金额": min_purchase,
-                "综合费率": total,
-                "updated_at": time.time(),
-            },
-        )
-
-
-def clear_fund_fees():
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM fund_fee"))
-
-
-# ── 基金规模缓存 ──
-
-
-def load_fund_scale(codes):
-    """从 fund_scale 表批量加载规模，返回 {code: {"净资产规模": value, "份额规模": value}}"""
-    if not codes:
-        return {}
-    result = {}
-    with engine.connect() as conn:
-        stmt = fund_scale.select().where(fund_scale.c.基金代码.in_(codes))
-        rows = conn.execute(stmt).fetchall()
-        for r in rows:
-            result[r[0]] = {"净资产规模": r[1], "份额规模": r[2]}
-    return result
-
-
-def save_fund_scale(code, scale, shares=None):
-    """写入单只基金规模数据。scale 为净资产规模（亿元），shares 为份额规模（亿份）。"""
-    with engine.begin() as conn:
-        conn.execute(
-            fund_scale.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code, "净资产规模": scale, "份额规模": shares, "updated_at": time.time()},
-        )
-
-
-def clear_fund_scale():
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM fund_scale"))
-
-
-# ── 基金净值缓存 ──
-
-
-def load_fund_nav():
-    """返回 fund_nav 全表 DataFrame 或 None"""
-    try:
-        return pd.read_sql(text("SELECT * FROM fund_nav"), engine)
-    except Exception:
-        return None
-
-
-def save_fund_nav(df):
-    """替换写入 fund_nav 表"""
-    df.to_sql("fund_nav", engine, if_exists="replace", index=False)
-    with engine.begin() as conn:
-        conn.execute(
-            funds_meta.insert().prefix_with("OR REPLACE"),
-            {"key": "fund_nav", "value": "ok", "updated_at": time.time()},
-        )
-
-
-def is_fund_nav_fresh(ttl=None):
-    """检查 fund_nav 缓存是否仍在 TTL 内"""
-    if ttl is None:
-        ttl = NAV_TTL
-    try:
-        with engine.connect() as conn:
-            row = conn.execute(text("SELECT updated_at FROM funds_meta WHERE key='fund_nav'")).fetchone()
-            if row and row[0]:
-                return time.time() - row[0] < ttl
-    except Exception:
-        pass
-    return False
-
-
-def clear_fund_nav():
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM fund_nav"))
-        conn.execute(text("DELETE FROM funds_meta WHERE key='fund_nav'"))
+# ── 复杂 JOIN 查询 ──
 
 
 def load_index_fund_nav():
@@ -436,138 +502,7 @@ def load_pension_funds():
         return None
 
 
-# ── 基金基本信息缓存 ──
-
-
-def load_fund_profile(codes):
-    """从 fund_profile 表批量加载基金基本信息，返回 {code: {...}}"""
-    if not codes:
-        return {}
-    result = {}
-    with engine.connect() as conn:
-        stmt = fund_profile.select().where(fund_profile.c.基金代码.in_(codes))
-        rows = conn.execute(stmt).fetchall()
-        for r in rows:
-            result[r[0]] = {
-                "发行日期": r[1],
-                "成立日期": r[2],
-                "基金管理人": r[3],
-                "基金托管人": r[4],
-                "基金经理": r[5],
-                "业绩比较基准": r[6],
-                "跟踪标的": r[7],
-                "跟踪方式": r[8],
-            }
-    return result
-
-
-def save_fund_profile(
-    code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index, track_method=None
-):
-    """写入单只基金基本信息。"""
-    with engine.begin() as conn:
-        conn.execute(
-            fund_profile.insert().prefix_with("OR REPLACE"),
-            {
-                "基金代码": code,
-                "发行日期": issue_date,
-                "成立日期": establish_date,
-                "基金管理人": mgr,
-                "基金托管人": custodian,
-                "基金经理": fund_mgr,
-                "业绩比较基准": benchmark,
-                "跟踪标的": track_index,
-                "跟踪方式": track_method,
-                "updated_at": time.time(),
-            },
-        )
-
-
-def batch_update_tracking_method(method_map):
-    """批量更新 fund_profile.跟踪方式，method_map = {code: '被动指数型'|'增强指数型'}"""
-    with engine.begin() as conn:
-        for code, method in method_map.items():
-            conn.execute(
-                text("UPDATE fund_profile SET 跟踪方式 = :method WHERE 基金代码 = :code"),
-                {"method": method, "code": code},
-            )
-
-
-def clear_fund_profile():
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM fund_profile"))
-
-
-# ── 基金名录缓存 ──
-
-
-def load_catalog():
-    """从 fund_catalog 表加载基金名录，返回 DataFrame 或 None"""
-    try:
-        return pd.read_sql(text("SELECT * FROM fund_catalog"), engine)
-    except Exception:
-        return None
-
-
-def save_catalog(df):
-    """写入基金名录到 fund_catalog 表并记录 TTL"""
-    df.to_sql("fund_catalog", engine, if_exists="replace", index=False)
-    with engine.begin() as conn:
-        conn.execute(
-            funds_meta.insert().prefix_with("OR REPLACE"),
-            {"key": "fund_catalog", "value": "ok", "updated_at": time.time()},
-        )
-
-
-def is_catalog_fresh(ttl=None):
-    """检查 fund_catalog 缓存是否仍在 TTL 内"""
-    if ttl is None:
-        ttl = CATALOG_TTL
-    try:
-        with engine.connect() as conn:
-            row = conn.execute(text("SELECT updated_at FROM funds_meta WHERE key='fund_catalog'")).fetchone()
-            if row and row[0]:
-                return time.time() - row[0] < ttl
-    except Exception:
-        pass
-    return False
-
-
-def clear_catalog():
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM fund_catalog"))
-        conn.execute(text("DELETE FROM funds_meta WHERE key='fund_catalog'"))
-
-
-def is_fee_cache_fresh(ttl=None):
-    """检查 fund_fee 缓存是否仍在 TTL 内"""
-    if ttl is None:
-        ttl = FEE_TTL
-    try:
-        with engine.connect() as conn:
-            row = conn.execute(text("SELECT updated_at FROM funds_meta WHERE key='fund_fee'")).fetchone()
-            if row and row[0]:
-                return time.time() - row[0] < ttl
-    except Exception:
-        pass
-    return False
-
-
-def set_fee_cache_fresh():
-    with engine.begin() as conn:
-        conn.execute(
-            funds_meta.insert().prefix_with("OR REPLACE"),
-            {"key": "fund_fee", "value": "ok", "updated_at": time.time()},
-        )
-
-
-def get_fee_cached_count():
-    try:
-        with engine.connect() as conn:
-            row = conn.execute(text("SELECT COUNT(*) FROM fund_fee")).fetchone()
-            return row[0] if row else 0
-    except Exception:
-        return 0
+# ── 全局操作 ──
 
 
 def clear_all():

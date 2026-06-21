@@ -141,8 +141,8 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
     scale_shares_map = {}
 
     # ── 从 DB 缓存读取 ──
-    cached = db.load_fund_fees(codes)
-    scale_raw = db.load_fund_scale(codes)
+    cached = db.fund_fees.load(codes)
+    scale_raw = db.fund_scale.load(codes)
     for c, v in scale_raw.items():
         scale_map[c] = v["净资产规模"]
         scale_shares_map[c] = v["份额规模"]
@@ -203,9 +203,9 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
             if mgmt is not None and cust is not None
             else None
         )
-        db.save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
-        db.save_fund_scale(code, scale, scale_shares)
-        db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+        db.fund_fees.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
+        db.fund_scale.save(code, scale, scale_shares)
+        db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
 
     for done, total in batch_fetch_overview(uncached, _persist, max_workers=10):
         if progress_placeholder:

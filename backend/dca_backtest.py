@@ -120,7 +120,7 @@ def fetch_fund_name(fund_code):
     try:
         import db
 
-        df = db.load_catalog()
+        df = db.fund_catalog.load()
         if df is not None:
             row = df[df["基金代码"] == fund_code]
             if not row.empty:

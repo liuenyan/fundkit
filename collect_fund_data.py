@@ -33,8 +33,8 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
     db.init_db()
 
     # ── TTL 检查 ──
-    if not force and not codes and db.is_fee_cache_fresh():
-        cnt = db.get_fee_cached_count()
+    if not force and not codes and db.fund_fees.is_fresh():
+        cnt = db.fund_fees.cached_count()
         print(f"费率缓存有效，已缓存 {cnt} 只基金，跳过。使用 --force 强制重采。")
         return
 
@@ -52,7 +52,7 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
     # ── Step 1: 保存申购费 + 起购金额 ──
     print("Step 1/2 — 保存申购费 + 起购金额…")
     for code, (purchase, min_purchase) in purchase_data.items():
-        db.save_fund_fee(code, purchase, None, None, None, min_purchase, None)
+        db.fund_fees.save(code, purchase, None, None, None, min_purchase, None)
     print(f"  → 已保存 {len(purchase_data)} 只基金申购费数据\n")
 
     # ── Step 2: 并发获取管理费/托管费/销售服务费 ──
@@ -61,7 +61,7 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
     success = 0
     failed = 0
 
-    load_cached = db.load_fund_fees(all_codes)
+    load_cached = db.fund_fees.load(all_codes)
 
     def _persist(code, result):
         nonlocal success, failed
@@ -82,9 +82,9 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
             if mgmt is not None and cust is not None
             else None
         )
-        db.save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
-        db.save_fund_scale(code, scale, scale_shares)
-        db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+        db.fund_fees.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
+        db.fund_scale.save(code, scale, scale_shares)
+        db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
         success += 1
 
     for done, total in batch_fetch_overview(all_codes, _persist, max_workers):
@@ -106,7 +106,7 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
 
     # ── 标记缓存新鲜 ──
     if not codes:
-        db.set_fee_cache_fresh()
+        db.fund_fees.set_fresh()
         print("  费率缓存 TTL 已更新")
 
 
@@ -134,7 +134,7 @@ def collect_tracking_method():
         print("  未获取到跟踪方式数据，跳过")
         return
 
-    db.batch_update_tracking_method(method_map)
+    db.fund_profile.batch_update_tracking_method(method_map)
     print(f"  → 已写入 {len(method_map)} 只基金跟踪方式（被动 {len(passive)} / 增强 {len(enhanced)}）")
 
     # ── 名称启发式兜底（覆盖场内ETF/海外/固收等 fund_info_index_em 未覆盖的） ──
@@ -207,7 +207,7 @@ def collect_fund_nav(force=False):
     TTL: 24 小时
     """
     db.init_db()
-    if not force and db.is_fund_nav_fresh():
+    if not force and db.fund_nav.is_fresh():
         print("净值缓存有效（24h内），跳过。使用 --force 强制重采。")
         return
 
@@ -326,14 +326,14 @@ def collect_fund_nav(force=False):
 
     nav_df = pd.DataFrame(rows)
     print(f"\n写入 {len(nav_df)} 条记录到 fund_nav 表…")
-    db.save_fund_nav(nav_df)
+    db.fund_nav.save(nav_df)
     print("写入完成。")
 
 
 def collect_fund_catalog(force=False):
     """采集全市场基金名录（fund_name_em），写入 fund_catalog 表。"""
     db.init_db()
-    if not force and db.is_catalog_fresh():
+    if not force and db.fund_catalog.is_fresh():
         print("基金名录缓存有效，跳过。使用 --force 强制重采。")
         return
     print("获取基金名录（fund_name_em）…")
@@ -342,7 +342,7 @@ def collect_fund_catalog(force=False):
     except Exception as e:
         print(f"  fund_name_em 调用失败: {e}")
         return
-    db.save_catalog(df)
+    db.fund_catalog.save(df)
     cnt = df["基金代码"].nunique()
     print(f"  → 已保存 {cnt} 只基金")
 
