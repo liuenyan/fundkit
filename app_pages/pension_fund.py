@@ -18,7 +18,7 @@ from pension_fund import (
 st.set_page_config(page_title="养老金选基", page_icon="🏦", layout="centered")
 
 st.title("🏦 养老金选基")
-st.markdown("筛选个人养老金账户（Y份额）可投资的基金。首次加载需逐只查询费率，约 1-2 分钟，后续自动复用缓存。")
+st.markdown("筛选个人养老金账户（Y份额）可投资的基金。费率与净值均从本地缓存读取，无需等待。")
 
 CATEGORY_LABELS = {
     "指数基金": "📊",
