@@ -152,10 +152,41 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
     print(f"\n采集完成！耗时 {elapsed:.0f}s")
     print(f"  成功: {success}  失败: {failed}")
 
+    # ── Step 3: 获取指数基金跟踪方式 ──
+    collect_tracking_method()
+
     # ── 标记缓存新鲜 ──
     if not codes:
         db.set_fee_cache_fresh()
         print("  费率缓存 TTL 已更新")
+
+
+def collect_tracking_method():
+    """
+    从 fund_info_index_em 获取指数基金的跟踪方式（被动指数型 / 增强指数型），
+    写入 fund_profile.跟踪方式。
+    """
+    print("\nStep 3 — 获取指数基金跟踪方式…")
+    db.init_db()
+    try:
+        passive = ak.fund_info_index_em(symbol="全部", indicator="被动指数型")
+        enhanced = ak.fund_info_index_em(symbol="全部", indicator="增强指数型")
+    except Exception as e:
+        print(f"  fund_info_index_em 调用失败: {e}")
+        return
+
+    method_map = {}
+    for code in passive["基金代码"]:
+        method_map[code] = "被动指数型"
+    for code in enhanced["基金代码"]:
+        method_map[code] = "增强指数型"
+
+    if not method_map:
+        print("  未获取到跟踪方式数据，跳过")
+        return
+
+    db.batch_update_tracking_method(method_map)
+    print(f"  → 已写入 {len(method_map)} 只基金跟踪方式（被动 {len(passive)} / 增强 {len(enhanced)}）")
 
 
 def main():
@@ -163,7 +194,12 @@ def main():
     parser.add_argument("--force", action="store_true", help="强制全量重采")
     parser.add_argument("--codes", help="指定基金代码（逗号分隔）")
     parser.add_argument("--workers", type=int, default=10, help="并发数（默认 10）")
+    parser.add_argument("--tracking-method", action="store_true", help="仅采集指数基金跟踪方式")
     args = parser.parse_args()
+
+    if args.tracking_method:
+        collect_tracking_method()
+        return
 
     codes = args.codes.split(",") if args.codes else None
     if codes:

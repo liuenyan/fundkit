@@ -57,6 +57,23 @@ def fetch_all_index_funds():
 
     domestic = ak.fund_info_index_em(symbol="全部", indicator="全部")
     domestic = domestic[[c for c in domestic.columns if c != "-"]].copy()
+
+    # 从 fund_profile 覆写 跟踪方式 / 跟踪标的（API 返回的是硬编码值）
+    db.init_db()
+    profile_codes = domestic["基金代码"].tolist()
+    profile_map = db.load_fund_profile(profile_codes)
+    for i, code in enumerate(domestic["基金代码"]):
+        info = profile_map.get(code)
+        if info:
+            if info.get("跟踪方式"):
+                domestic.at[i, "跟踪方式"] = info["跟踪方式"]
+            if info.get("跟踪标的"):
+                domestic.at[i, "跟踪标的"] = info["跟踪标的"]
+        # 无 profile 的走名称启发式兜底
+        if domestic.at[i, "跟踪方式"] in ("全部", "", None):
+            name = domestic.at[i, "基金名称"]
+            domestic.at[i, "跟踪方式"] = "增强指数型" if "增强" in str(name) else "被动指数型"
+
     domestic_codes = set(domestic["基金代码"])
 
     name_df = fund_catalog.get_catalog()

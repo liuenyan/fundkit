@@ -69,6 +69,20 @@ main()
 --stop-invest 0.20 --trailing-stop 0.08
 ```
 
+## Progress / TODO
+
+### Pending
+1. **`fund_nav` 表**: 建新表缓存最新净值(单位净值/累计净值/日增长率) + 区间收益(近1周/1月/3月/6月/1年/成立来/今年来)，来源于 `fund_info_index_em` + `fund_etf_fund_daily_em`，定期刷新。目标是冷启动时不再依赖实时 API。
+
+### Completed
+- `fund_fee` → `fund_scale` / `fund_profile` 分表剥离，迁移 + 回填完成
+- `collect_fees.py` → `collect_fund_data.py` 改名，扩展采集 份额规模 + 档案信息
+- `fund_data.py`: `fetch_mgmt_cust_fees` 返回扩展，`enrich_fee_scale` 新增份额规模兜底
+- 298 只基金确认无公开规模数据（含 13 Y 份额），UI 显示 "—"
+- `fetch_one_fee` → `fetch_one_overview` 重命名
+- `fund_profile` 新增 `跟踪方式` 列，`collect_tracking_method()` 通过 `fund_info_index_em`（分开调被动/增强两组 API）写入 4295 只指数基金跟踪方式
+- `index_fund.py` 从 `fund_profile` 读取 `跟踪方式` 替代 AKShare 硬编码值，兜底名称启发式
+
 ## Quirks
 
 - `generate_dca_dates()` walks forward up to 10 trading days from the candidate date. If no match in 10 days, the date is skipped silently.

@@ -123,6 +123,7 @@ fund_profile = Table(
     Column("基金经理", String),
     Column("业绩比较基准", String),
     Column("跟踪标的", String),
+    Column("跟踪方式", String),
     Column("updated_at", Float),
 )
 
@@ -171,6 +172,16 @@ def init_db():
             ).fetchall()]
             if "份额规模" not in cols:
                 conn.execute(text("ALTER TABLE fund_scale ADD COLUMN 份额规模 Float"))
+    except Exception:
+        pass
+    # 迁移: fund_profile 追加跟踪方式列
+    try:
+        with engine.connect() as conn:
+            cols = [row[1] for row in conn.execute(
+                text("PRAGMA table_info(fund_profile)")
+            ).fetchall()]
+            if "跟踪方式" not in cols:
+                conn.execute(text("ALTER TABLE fund_profile ADD COLUMN 跟踪方式 String"))
     except Exception:
         pass
 
@@ -363,11 +374,12 @@ def load_fund_profile(codes):
                 "基金经理": r[5],
                 "业绩比较基准": r[6],
                 "跟踪标的": r[7],
+                "跟踪方式": r[8],
             }
     return result
 
 
-def save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index):
+def save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index, track_method=None):
     """写入单只基金基本信息。"""
     with engine.begin() as conn:
         conn.execute(
@@ -376,8 +388,19 @@ def save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr
              "成立日期": establish_date, "基金管理人": mgr,
              "基金托管人": custodian, "基金经理": fund_mgr,
              "业绩比较基准": benchmark, "跟踪标的": track_index,
+             "跟踪方式": track_method,
              "updated_at": time.time()},
         )
+
+
+def batch_update_tracking_method(method_map):
+    """批量更新 fund_profile.跟踪方式，method_map = {code: '被动指数型'|'增强指数型'}"""
+    with engine.begin() as conn:
+        for code, method in method_map.items():
+            conn.execute(
+                text("UPDATE fund_profile SET 跟踪方式 = :method WHERE 基金代码 = :code"),
+                {"method": method, "code": code},
+            )
 
 
 def clear_fund_profile():
