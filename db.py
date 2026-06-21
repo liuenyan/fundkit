@@ -320,49 +320,6 @@ fund_catalog = FundCatalogTable()
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
-    # 迁移: fund_fee → fund_scale 拆分（旧库）
-    try:
-        with engine.connect() as conn:
-            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(fund_fee)")).fetchall()]
-            if "净资产规模" in cols:
-                conn.execute(
-                    text("""
-                    INSERT OR IGNORE INTO fund_scale (基金代码, 净资产规模, updated_at)
-                    SELECT 基金代码, 净资产规模, updated_at FROM fund_fee
-                    WHERE 净资产规模 IS NOT NULL
-                """)
-                )
-                conn.execute(text("ALTER TABLE fund_fee DROP COLUMN 净资产规模"))
-    except Exception:
-        pass
-    # 迁移: fund_scale 追加份额规模列
-    try:
-        with engine.connect() as conn:
-            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(fund_scale)")).fetchall()]
-            if "份额规模" not in cols:
-                conn.execute(text("ALTER TABLE fund_scale ADD COLUMN 份额规模 Float"))
-    except Exception:
-        pass
-    # 迁移: fund_profile 追加跟踪方式列
-    try:
-        with engine.connect() as conn:
-            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(fund_profile)")).fetchall()]
-            if "跟踪方式" not in cols:
-                conn.execute(text("ALTER TABLE fund_profile ADD COLUMN 跟踪方式 String"))
-    except Exception:
-        pass
-    # 迁移: fund_nav 建表（新表，create_all 已处理，仅添加索引确保性能）
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fund_nav_code ON fund_nav(基金代码)"))
-    except Exception:
-        pass
-    # 迁移: 清理已废弃的 funds 表元数据
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("DELETE FROM funds_meta WHERE key='funds'"))
-    except Exception:
-        pass
 
 
 # ── 估值序列缓存 ──
