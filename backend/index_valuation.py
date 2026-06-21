@@ -21,6 +21,31 @@ logging.basicConfig(
 
 _TODAY = datetime.now().strftime("%Y%m%d")
 
+_FETCH_API = {
+    ("csindex", "pe"):     (lambda p: ak.stock_zh_index_hist_csindex(p, start_date="20000101", end_date=_TODAY), "滚动市盈率"),
+    ("csindex", "price"):  (lambda p: ak.stock_zh_index_hist_csindex(p, start_date="20000101", end_date=_TODAY), "收盘"),
+    ("market_pe", "pe"):   (lambda p: ak.stock_market_pe_lg(p),          "平均市盈率"),
+    ("market_pe", "pb"):   (lambda p: ak.stock_market_pb_lg(p),          "市净率"),
+    ("index_lg", "pe"):    (lambda p: ak.stock_index_pe_lg(p),           "滚动市盈率"),
+    ("index_lg", "pb"):    (lambda p: ak.stock_index_pb_lg(p),           "市净率"),
+    ("index_lg", "price"): (lambda p: ak.stock_index_pe_lg(p),           "指数"),
+}
+
+
+def _fetch(source, metric, param):
+    entry = _FETCH_API.get((source, metric))
+    if entry is None:
+        logger.warning("未知数据源/指标组合: %s/%s", source, metric)
+        return None
+    fetch_fn, col = entry
+    df = fetch_fn(param)
+    if df is None or df.empty or col not in df.columns:
+        logger.warning("获取 %s %s 失败", param, metric)
+        return None
+    out = df[["日期", col]].dropna().copy()
+    out.columns = ["date", "value"]
+    return out
+
 CONFIG = [
     {
         "name": "沪深300",
@@ -80,85 +105,6 @@ def rolling_percentile(df, window_days, min_periods=60):
     return result
 
 
-# ── 底层 API 请求（不含缓存） ──
-
-
-def _fetch_csindex_pe(param):
-    df = ak.stock_zh_index_hist_csindex(param, start_date="20000101", end_date=_TODAY)
-    col = "滚动市盈率"
-    if df is None or df.empty or col not in df.columns:
-        logger.warning("获取 %s PE 失败：数据为空或缺少 %s 列", param, col)
-        return None
-    out = df[["日期", col]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
-def _fetch_csindex_price(param):
-    df = ak.stock_zh_index_hist_csindex(param, start_date="20000101", end_date=_TODAY)
-    col = "收盘"
-    if df is None or df.empty or col not in df.columns:
-        logger.warning("获取 %s 点位失败：数据为空或缺少 %s 列", param, col)
-        return None
-    out = df[["日期", col]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
-def _fetch_market_pe(param):
-    df = ak.stock_market_pe_lg(param)
-    col = "平均市盈率"
-    if df is None or df.empty or col not in df.columns:
-        logger.warning("获取 %s 市场 PE 失败：数据为空或缺少 %s 列", param, col)
-        return None
-    out = df[["日期", col]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
-def _fetch_market_pb(param):
-    df = ak.stock_market_pb_lg(param)
-    if df is None or df.empty or "市净率" not in df.columns:
-        logger.warning("获取 %s 市场 PB 失败：数据为空或缺少市净率列", param)
-        return None
-    out = df[["日期", "市净率"]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
-def _fetch_index_pe_lg(param):
-    df = ak.stock_index_pe_lg(param)
-    col = "滚动市盈率"
-    if df is None or df.empty or col not in df.columns:
-        logger.warning("获取 %s PE 失败：数据为空或缺少 %s 列", param, col)
-        return None
-    out = df[["日期", col]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
-def _fetch_index_pb_lg(param):
-    df = ak.stock_index_pb_lg(param)
-    col = "市净率"
-    if df is None or df.empty or col not in df.columns:
-        logger.warning("获取 %s PB 失败：数据为空或缺少 %s 列", param, col)
-        return None
-    out = df[["日期", col]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
-def _fetch_index_price_lg(param):
-    df = ak.stock_index_pe_lg(param)
-    col = "指数"
-    if df is None or df.empty or col not in df.columns:
-        logger.warning("获取 %s 点位失败：数据为空或缺少 %s 列", param, col)
-        return None
-    out = df[["日期", col]].dropna().copy()
-    out.columns = ["date", "value"]
-    return out
-
-
 # ── 缓存感知的数据获取 ──
 
 
@@ -197,37 +143,13 @@ def clear_cache():
 
 def _get_series(cfg, metric="pe"):
     name = cfg["name"]
-    if metric == "pe":
-        source = cfg["source"]
-        param = cfg["param"]
-    elif metric == "price":
-        source = cfg["source"]
-        param = cfg["param"]
-    else:
+    if metric == "pb":
         source = cfg.get("pb_source", cfg["source"])
         param = cfg.get("pb_param", cfg["param"])
-
-    if source == "csindex":
-        if metric == "pe":
-            return get_or_update_series(name, "pe", source, lambda: _fetch_csindex_pe(param))
-        if metric == "price":
-            return get_or_update_series(name, "price", source, lambda: _fetch_csindex_price(param))
-
-    if source == "market_pe":
-        if metric == "pe":
-            return get_or_update_series(name, "pe", source, lambda: _fetch_market_pe(param))
-        if metric == "pb":
-            return get_or_update_series(name, "pb", source, lambda: _fetch_market_pb(param))
-
-    if source == "index_lg":
-        if metric == "pe":
-            return get_or_update_series(name, "pe", source, lambda: _fetch_index_pe_lg(param))
-        if metric == "pb":
-            return get_or_update_series(name, "pb", source, lambda: _fetch_index_pb_lg(param))
-        if metric == "price":
-            return get_or_update_series(name, "price", source, lambda: _fetch_index_price_lg(param))
-
-    return pd.DataFrame(), False
+    else:
+        source = cfg["source"]
+        param = cfg["param"]
+    return get_or_update_series(name, metric, source, lambda: _fetch(source, metric, param))
 
 
 # ── 公开接口 ──
@@ -317,7 +239,7 @@ def _fetch_dividend_yield(_=None):
         return None
     payout_ratio = dp1 * pe1 / 100
 
-    pe_df, _ = get_or_update_series("中证红利", "pe", "csindex", lambda: _fetch_csindex_pe("000922"))
+    pe_df, _ = get_or_update_series("中证红利", "pe", "csindex", lambda: _fetch("csindex", "pe", "000922"))
     if pe_df is None or pe_df.empty:
         logger.warning("获取中证红利历史PE失败，无法估算股息率")
         return None
