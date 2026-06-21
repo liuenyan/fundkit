@@ -6,6 +6,8 @@
 import pandas as pd
 import streamlit as st
 
+from tools.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
+
 from backend.index_fund import (
     COMMON_INDICES,
     SORT_OPTIONS,
@@ -66,59 +68,6 @@ if index_name:
         result = filter_funds(result, share_class=share_class)
     result = sort_result(result, sort_by)
 
-    def _fmt_pct(v):
-        if pd.isna(v) or v == "":
-            return "—"
-        try:
-            v = float(str(v).replace("%", ""))
-            return f"{v:.2f}%"
-        except (ValueError, TypeError):
-            return str(v)
-
-    def _fmt_nav(v):
-        if pd.isna(v) or v == "":
-            return "—"
-        try:
-            return f"{float(v):.4f}"
-        except (ValueError, TypeError):
-            return str(v)
-
-    def _fmt_scale(v):
-        if pd.isna(v) or v == "" or v is None:
-            return "—"
-        try:
-            s = float(v)
-            if s >= 1:
-                return f"{s:.1f}亿"
-            return f"{s * 100:.0f}万"
-        except (ValueError, TypeError):
-            return str(v)
-
-    def _fmt_total_fee(row):
-        """返回综合费率显示字符串"""
-        parts = []
-        buy = row.get("申购费")
-        mgmt = row.get("管理费")
-        cust = row.get("托管费")
-        sales = row.get("销售服务费")
-        total = row.get("综合费率")
-        if pd.notna(total):
-            parts.append(f"{total:.2f}%")
-        else:
-            parts.append("—")
-        detail = []
-        if pd.notna(buy):
-            detail.append(f"申{_fmt_pct(buy)}")
-        if pd.notna(mgmt):
-            detail.append(f"管{_fmt_pct(mgmt)}")
-        if pd.notna(cust):
-            detail.append(f"托{_fmt_pct(cust)}")
-        if pd.notna(sales):
-            detail.append(f"销{_fmt_pct(sales)}")
-        if detail:
-            parts.append("(" + "+".join(detail) + ")")
-        return " ".join(parts)
-
     display = result[
         [
             "基金代码",
@@ -137,14 +86,14 @@ if index_name:
         ]
     ].copy()
 
-    display["日增长率"] = display["日增长率"].apply(_fmt_pct)
-    display["单位净值"] = display["单位净值"].apply(_fmt_nav)
-    display["基金规模"] = display["基金规模"].apply(_fmt_scale)
-    display["综合费率"] = display.apply(_fmt_total_fee, axis=1)
+    display["日增长率"] = display["日增长率"].apply(fmt_pct)
+    display["单位净值"] = display["单位净值"].apply(fmt_nav)
+    display["基金规模"] = display["基金规模"].apply(fmt_scale)
+    display["综合费率"] = display.apply(fmt_total_fee, axis=1)
     display["申购费"] = display["申购费"].apply(lambda v: f"{v:.2f}%" if pd.notna(v) else "—")
-    display["销售服务费"] = display["销售服务费"].apply(_fmt_pct)
-    display["管理费"] = display["管理费"].apply(_fmt_pct)
-    display["托管费"] = display["托管费"].apply(_fmt_pct)
+    display["销售服务费"] = display["销售服务费"].apply(fmt_pct)
+    display["管理费"] = display["管理费"].apply(fmt_pct)
+    display["托管费"] = display["托管费"].apply(fmt_pct)
 
     display = display.rename(
         columns={

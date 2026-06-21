@@ -6,6 +6,8 @@
 import pandas as pd
 import streamlit as st
 
+from tools.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
+
 from backend.pension_fund import (
     PENSION_CATEGORIES,
     SORT_OPTIONS,
@@ -26,63 +28,6 @@ CATEGORY_LABELS = {
     "FOF-目标风险-均衡": "⚖️",
     "FOF-目标风险-积极": "🚀",
 }
-
-
-def _fmt_pct(v):
-    if pd.isna(v) or v == "":
-        return "—"
-    try:
-        v = float(str(v).replace("%", ""))
-        return f"{v:.2f}%"
-    except (ValueError, TypeError):
-        return str(v)
-
-
-def _fmt_nav(v):
-    if pd.isna(v) or v == "":
-        return "—"
-    try:
-        return f"{float(v):.4f}"
-    except (ValueError, TypeError):
-        return str(v)
-
-
-def _fmt_scale(v):
-    if pd.isna(v) or v == "" or v is None:
-        return "—"
-    try:
-        s = float(v)
-        if s >= 1:
-            return f"{s:.1f}亿"
-        return f"{s * 100:.0f}万"
-    except (ValueError, TypeError):
-        return str(v)
-
-
-def _fmt_total_fee(row):
-    buy = row.get("申购费")
-    mgmt = row.get("管理费")
-    cust = row.get("托管费")
-    sales = row.get("销售服务费")
-    total = row.get("综合费率")
-    parts = []
-    if pd.notna(total):
-        parts.append(f"{total:.2f}%")
-    else:
-        parts.append("—")
-    detail = []
-    if pd.notna(buy):
-        detail.append(f"申{_fmt_pct(buy)}")
-    if pd.notna(mgmt):
-        detail.append(f"管{_fmt_pct(mgmt)}")
-    if pd.notna(cust):
-        detail.append(f"托{_fmt_pct(cust)}")
-    if pd.notna(sales):
-        detail.append(f"销{_fmt_pct(sales)}")
-    if detail:
-        parts.append("(" + "+".join(detail) + ")")
-    return " ".join(parts)
-
 
 col1, col2 = st.columns([2, 1])
 with col1:
@@ -107,9 +52,9 @@ for i, (_, row) in enumerate(result.iterrows()):
         cols[0].markdown(f"**{row['基金代码']}**")
         cols[1].markdown(f"{row['基金名称']}")
         cols[2].markdown(f"{cat_icon} {cat_label.split('-')[-1]}")
-        cols[3].markdown(f"净值: {_fmt_nav(row['单位净值'])}")
-        cols[4].markdown(f"费率: {_fmt_total_fee(row)}")
-        cols[5].markdown(f"规模: {_fmt_scale(row.get('基金规模'))}")
+        cols[3].markdown(f"净值: {fmt_nav(row['单位净值'])}")
+        cols[4].markdown(f"费率: {fmt_total_fee(row)}")
+        cols[5].markdown(f"规模: {fmt_scale(row.get('基金规模'))}")
         if cols[6].button("📊 定投回测", key=f"dca_{row['基金代码']}_{i}", use_container_width=True):
             st.switch_page("app_pages/dca.py", query_params={"fund": row["基金代码"]})
 
@@ -145,15 +90,15 @@ with st.expander("📋 完整列表", expanded=False):
         "基金规模": "基金规模",
     }
     detail_df = result[[c for c in detail_cols if c in result.columns]].copy()
-    detail_df["最新净值"] = detail_df["单位净值"].apply(_fmt_nav)
-    detail_df["日涨跌"] = detail_df["日增长率"].apply(_fmt_pct)
+    detail_df["最新净值"] = detail_df["单位净值"].apply(fmt_nav)
+    detail_df["日涨跌"] = detail_df["日增长率"].apply(fmt_pct)
     detail_df["申购费"] = detail_df.get("申购费", pd.Series(dtype=float)).apply(
         lambda v: f"{v:.2f}%" if pd.notna(v) else "—"
     )
-    detail_df["管理费"] = detail_df["管理费"].apply(_fmt_pct)
-    detail_df["托管费"] = detail_df["托管费"].apply(_fmt_pct)
-    detail_df["基金规模"] = detail_df["基金规模"].apply(_fmt_scale)
-    detail_df["综合费率"] = detail_df.apply(_fmt_total_fee, axis=1)
+    detail_df["管理费"] = detail_df["管理费"].apply(fmt_pct)
+    detail_df["托管费"] = detail_df["托管费"].apply(fmt_pct)
+    detail_df["基金规模"] = detail_df["基金规模"].apply(fmt_scale)
+    detail_df["综合费率"] = detail_df.apply(fmt_total_fee, axis=1)
     display_cols = [
         "基金代码",
         "基金名称",
