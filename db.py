@@ -178,6 +178,12 @@ def init_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fund_nav_code ON fund_nav(基金代码)"))
     except Exception:
         pass
+    # 迁移: 清理已废弃的 funds 表元数据
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM funds_meta WHERE key='funds'"))
+    except Exception:
+        pass
 
 
 # ── 估值序列缓存 ──
