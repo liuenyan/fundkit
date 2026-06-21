@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timedelta
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,9 +46,7 @@ def parse_args():
         default="monthly",
         help="定投频率",
     )
-    p.add_argument(
-        "--day", type=int, default=10, help="每月定投日 (1-28，仅 monthly 有效)"
-    )
+    p.add_argument("--day", type=int, default=10, help="每月定投日 (1-28，仅 monthly 有效)")
     p.add_argument(
         "--weekday",
         type=int,
@@ -66,14 +65,19 @@ def parse_args():
     p.add_argument("--output", default=None, help="CSV 导出路径")
     p.add_argument("--chart", default="./charts", help="图表输出目录")
 
-    p.add_argument("--take-profit", type=float, default=0,
-                   help="【策略A】目标止盈收益率 (如 0.20 表示收益达 20%% 即卖出)")
-    p.add_argument("--tp-cycle", action="store_true",
-                   help="【策略A】循环止盈模式（止盈后重新开始定投）")
-    p.add_argument("--stop-invest", type=float, default=0,
-                   help="【策略B】停投触发收益率 (如 0.20 表示收益达 20%% 即停投，配合 --trailing-stop 使用)")
-    p.add_argument("--trailing-stop", type=float, default=0,
-                   help="【策略B】移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)")
+    p.add_argument(
+        "--take-profit", type=float, default=0, help="【策略A】目标止盈收益率 (如 0.20 表示收益达 20%% 即卖出)"
+    )
+    p.add_argument("--tp-cycle", action="store_true", help="【策略A】循环止盈模式（止盈后重新开始定投）")
+    p.add_argument(
+        "--stop-invest",
+        type=float,
+        default=0,
+        help="【策略B】停投触发收益率 (如 0.20 表示收益达 20%% 即停投，配合 --trailing-stop 使用)",
+    )
+    p.add_argument(
+        "--trailing-stop", type=float, default=0, help="【策略B】移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)"
+    )
     return p.parse_args()
 
 
@@ -81,12 +85,8 @@ def fetch_fund_data(fund_code, start_date, end_date):
     """获取基金历史净值数据（单位净值 + 累计净值）"""
     print(f"获取基金 {fund_code} 历史净值数据 ...")
     try:
-        df_unit = ak.fund_open_fund_info_em(
-            symbol=fund_code, indicator="单位净值走势"
-        )
-        df_acc = ak.fund_open_fund_info_em(
-            symbol=fund_code, indicator="累计净值走势"
-        )
+        df_unit = ak.fund_open_fund_info_em(symbol=fund_code, indicator="单位净值走势")
+        df_acc = ak.fund_open_fund_info_em(symbol=fund_code, indicator="累计净值走势")
     except Exception as e:
         print(f"获取数据失败: {e}")
         sys.exit(1)
@@ -95,9 +95,7 @@ def fetch_fund_data(fund_code, start_date, end_date):
         print("未获取到数据，请检查基金代码是否正确")
         sys.exit(1)
 
-    df_unit = df_unit.rename(
-        columns={"净值日期": "date", "单位净值": "unit_nav", "日增长率": "daily_return"}
-    )
+    df_unit = df_unit.rename(columns={"净值日期": "date", "单位净值": "unit_nav", "日增长率": "daily_return"})
     df_acc = df_acc.rename(columns={"净值日期": "date", "累计净值": "acc_nav"})
 
     df = df_unit.merge(df_acc, on="date", how="left")
@@ -106,9 +104,7 @@ def fetch_fund_data(fund_code, start_date, end_date):
     df["acc_nav"] = pd.to_numeric(df["acc_nav"], errors="coerce")
     df = df.sort_values("date").reset_index(drop=True)
 
-    mask = (df["date"] >= pd.Timestamp(start_date)) & (
-        df["date"] <= pd.Timestamp(end_date)
-    )
+    mask = (df["date"] >= pd.Timestamp(start_date)) & (df["date"] <= pd.Timestamp(end_date))
     df = df[mask].reset_index(drop=True)
 
     if df.empty:
@@ -123,6 +119,7 @@ def fetch_fund_name(fund_code):
     """获取基金简称"""
     try:
         import db
+
         df = db.load_catalog()
         if df is not None:
             row = df[df["基金代码"] == fund_code]
@@ -145,9 +142,7 @@ def generate_dca_dates(nav_df, freq, start_date, end_date, day=10, weekday=1):
 
     candidates = []
     if freq in ("weekly", "biweekly"):
-        week_dates = pd.date_range(
-            start, end, freq=f'W-{WEEKDAY_MAP[weekday]}'
-        )
+        week_dates = pd.date_range(start, end, freq=f"W-{WEEKDAY_MAP[weekday]}")
         step = 2 if freq == "biweekly" else 1
         candidates = list(week_dates[::step])
     elif freq == "monthly":
@@ -187,9 +182,17 @@ def get_redeem_rate(hold_days, schedule=None):
     return 0.0
 
 
-def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=None,
-                 take_profit=None, tp_cycle=False,
-                 stop_invest=None, trailing_stop=None):
+def simulate_dca(
+    nav_df,
+    invest_dates,
+    amount,
+    purchase_rate,
+    redeem_schedule=None,
+    take_profit=None,
+    tp_cycle=False,
+    stop_invest=None,
+    trailing_stop=None,
+):
     """执行定投模拟
 
     策略A（目标止盈）: take_profit — 收益达目标即卖出，可选 tp_cycle 循环
@@ -214,13 +217,19 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
             total_units += units
             total_cost += amount
             market_value = total_units * nav
-            records.append({
-                "date": date, "nav": nav, "investment": amount,
-                "units_added": units, "total_units": total_units,
-                "total_cost": total_cost, "market_value": market_value,
-                "profit": market_value - total_cost,
-                "return_rate": (market_value - total_cost) / total_cost,
-            })
+            records.append(
+                {
+                    "date": date,
+                    "nav": nav,
+                    "investment": amount,
+                    "units_added": units,
+                    "total_units": total_units,
+                    "total_cost": total_cost,
+                    "market_value": market_value,
+                    "profit": market_value - total_cost,
+                    "return_rate": (market_value - total_cost) / total_cost,
+                }
+            )
         detail = pd.DataFrame(records)
         if detail.empty:
             print("错误：未生成有效的定投记录")
@@ -285,14 +294,19 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
 
         if strategy_a and total_units > 0 and round_return >= take_profit:
             should_sell = True
-            sell_reason = f"目标收益率 {take_profit*100:.0f}%"
+            sell_reason = f"目标收益率 {take_profit * 100:.0f}%"
 
         if strategy_b:
             if total_units > 0 and round_return >= stop_invest:
                 is_active = False
-            if not is_active and total_units > 0 and peak_return >= trailing_stop and round_return <= peak_return - trailing_stop:
+            if (
+                not is_active
+                and total_units > 0
+                and peak_return >= trailing_stop
+                and round_return <= peak_return - trailing_stop
+            ):
                 should_sell = True
-                sell_reason = f"移动止盈（回撤 {trailing_stop*100:.0f}%）"
+                sell_reason = f"移动止盈（回撤 {trailing_stop * 100:.0f}%）"
 
         if should_sell:
             fee = 0.0
@@ -301,16 +315,18 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
                 rate = get_redeem_rate(hold, redeem_schedule)
                 fee += b["units"] * nav * rate
             net_proceeds = market_value - fee
-            events.append({
-                "date": date,
-                "nav": nav,
-                "return_rate": round_return,
-                "round_cost": round_cost,
-                "profit": market_value - round_cost,
-                "redeem_fee": fee,
-                "net_proceeds": net_proceeds,
-                "reason": sell_reason,
-            })
+            events.append(
+                {
+                    "date": date,
+                    "nav": nav,
+                    "return_rate": round_return,
+                    "round_cost": round_cost,
+                    "profit": market_value - round_cost,
+                    "redeem_fee": fee,
+                    "net_proceeds": net_proceeds,
+                    "reason": sell_reason,
+                }
+            )
             total_recovered += net_proceeds
             total_units = 0.0
             round_cost = 0.0
@@ -328,19 +344,21 @@ def simulate_dca(nav_df, invest_dates, amount, purchase_rate, redeem_schedule=No
         overall_profit = total_value - total_invested
         overall_return = overall_profit / total_invested if total_invested > 0 else 0.0
 
-        records.append({
-            "date": date,
-            "nav": nav,
-            "investment": invested_today,
-            "units_added": units_added_today,
-            "total_units": total_units,
-            "total_cost": round_cost,
-            "market_value": market_value,
-            "profit": overall_profit,
-            "return_rate": overall_return,
-            "total_invested": total_invested,
-            "total_value": total_value,
-        })
+        records.append(
+            {
+                "date": date,
+                "nav": nav,
+                "investment": invested_today,
+                "units_added": units_added_today,
+                "total_units": total_units,
+                "total_cost": round_cost,
+                "market_value": market_value,
+                "profit": overall_profit,
+                "return_rate": overall_return,
+                "total_invested": total_invested,
+                "total_value": total_value,
+            }
+        )
 
     detail = pd.DataFrame(records)
     if detail.empty:
@@ -425,10 +443,8 @@ def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, cha
 
     # --- 子图1: 净值走势与定投成本 ---
     ax1 = axes[0]
-    ax1.plot(nav_df["date"], nav_df["unit_nav"], color="steelblue", lw=1.2,
-             alpha=0.9, label="单位净值")
-    ax1.plot(nav_df["date"], nav_df["acc_nav"], color="steelblue", lw=0.8,
-             ls="--", alpha=0.6, label="累计净值")
+    ax1.plot(nav_df["date"], nav_df["unit_nav"], color="steelblue", lw=1.2, alpha=0.9, label="单位净值")
+    ax1.plot(nav_df["date"], nav_df["acc_nav"], color="steelblue", lw=0.8, ls="--", alpha=0.6, label="累计净值")
 
     if not detail.empty:
         avg = (detail["total_cost"] / detail["total_units"]).replace([np.inf, -np.inf], np.nan)
@@ -448,8 +464,7 @@ def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, cha
         dd_col = "total_value" if "total_value" in detail.columns else "market_value"
         roll_max = detail[dd_col].expanding().max()
         dd = (detail[dd_col] - roll_max) / roll_max * 100
-        ax2.fill_between(detail["date"].values, 0, dd.values,
-                         alpha=0.25, color="firebrick", label="回撤", step="pre")
+        ax2.fill_between(detail["date"].values, 0, dd.values, alpha=0.25, color="firebrick", label="回撤", step="pre")
 
     ax2.axhline(y=0, color="gray", ls="--", lw=0.6)
     ax2.set_title(f"{fund_name}（{fund_code}）定投收益率与回撤")
@@ -472,9 +487,7 @@ def main():
     nav_df = fetch_fund_data(args.fund, args.start, end_date)
     fund_name = fetch_fund_name(args.fund)
 
-    invest_dates = generate_dca_dates(
-        nav_df, args.freq, args.start, end_date, args.day, args.weekday
-    )
+    invest_dates = generate_dca_dates(nav_df, args.freq, args.start, end_date, args.day, args.weekday)
     print(f"定投日期: {len(invest_dates)} 期")
 
     if invest_dates.empty:
@@ -486,7 +499,10 @@ def main():
     stop_profit_on = strategy_a or strategy_b
 
     detail, events, redeem_fee, final_val = simulate_dca(
-        nav_df, invest_dates, args.amount, args.fee,
+        nav_df,
+        invest_dates,
+        args.amount,
+        args.fee,
         take_profit=args.take_profit if strategy_a else None,
         tp_cycle=args.tp_cycle,
         stop_invest=args.stop_invest if strategy_b else None,
@@ -505,9 +521,7 @@ def main():
     value_col = "total_value" if stop_profit_on else "market_value"
     mdd = max_drawdown(detail[value_col])
 
-    lumpsum = calc_lumpsum(
-        nav_df, total_invest, args.start, end_date, args.fee
-    )
+    lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee)
 
     sep = "=" * 52
     print(f"""
@@ -519,7 +533,7 @@ def main():
 定投频率: {args.freq:<8}  每期: {args.amount:>8,.2f} 元
 申购费率: {args.fee * 100:.2f}%
 
-{'─' * 52}
+{"─" * 52}
 总投入:        {total_invest:>12,.2f} 元
 期末市值:      {portfolio_value:>12,.2f} 元
 赎回费:        {redeem_fee:>12,.2f} 元
@@ -528,7 +542,7 @@ def main():
 年化收益率:    {ann_ret * 100:>12.2f}%
 最大回撤:      {mdd * 100:>12.2f}%
 
-{'─' * 52}
+{"─" * 52}
 一次性投入对比（同等金额 {total_invest:,.2f} 元）:
 """)
     if lumpsum:

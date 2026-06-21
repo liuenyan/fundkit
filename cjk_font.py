@@ -9,16 +9,30 @@ import matplotlib.pyplot as plt
 def setup_cjk_font():
     s = ""
     for _label, _names in (
-        ("sans-serif", [
-            "Noto Sans CJK SC", "Noto Sans CJK JP", "WenQuanYi Micro Hei",
-            "WenQuanYi Zen Hei", "AR PL UMing CN", "AR PL UKai CN",
-            "Source Han Sans CN", "Source Han Sans SC",
-            "Microsoft YaHei", "SimHei",
-        ]),
-        ("serif", [
-            "Noto Serif CJK SC", "Source Han Serif CN",
-            "AR PL New Sung", "SimSun",
-        ]),
+        (
+            "sans-serif",
+            [
+                "Noto Sans CJK SC",
+                "Noto Sans CJK JP",
+                "WenQuanYi Micro Hei",
+                "WenQuanYi Zen Hei",
+                "AR PL UMing CN",
+                "AR PL UKai CN",
+                "Source Han Sans CN",
+                "Source Han Sans SC",
+                "Microsoft YaHei",
+                "SimHei",
+            ],
+        ),
+        (
+            "serif",
+            [
+                "Noto Serif CJK SC",
+                "Source Han Serif CN",
+                "AR PL New Sung",
+                "SimSun",
+            ],
+        ),
     ):
         for _name in _names:
             try:

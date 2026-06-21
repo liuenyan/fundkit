@@ -3,9 +3,9 @@
 指数估值 — 独立页面
 """
 
-import numpy as np
 import pandas as pd
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -13,7 +13,7 @@ import streamlit as st
 from index_valuation import fetch_all as _fetch_valuation
 from index_valuation import fetch_series_all as _fetch_series
 from index_valuation import fetch_bond_yield_10y, fetch_dividend_yield
-from index_valuation import rolling_percentile, get_label
+from index_valuation import rolling_percentile
 from cjk_font import setup_cjk_font
 from index_valuation import clear_cache
 
@@ -47,19 +47,18 @@ for r in data:
     with st.container(border=True):
         has_pb = r.get("pb") is not None
         cols = st.columns([1, 1, 1, 1, 1, 1])
-        emoji = {"低估": "🔵", "适中": "🟢", "高估": "🔴",
-                 "获取失败": "⚪", "数据不足": "⚪"}.get(r["label"], "⚪")
+        emoji = {"低估": "🔵", "适中": "🟢", "高估": "🔴", "获取失败": "⚪", "数据不足": "⚪"}.get(r["label"], "⚪")
 
         cols[0].markdown(f"**{emoji} {r['name']}**")
-        pe_str = f"{r['pe']:.2f}" if r['pe'] is not None else "—"
+        pe_str = f"{r['pe']:.2f}" if r["pe"] is not None else "—"
         cols[1].metric("PE", pe_str, delta_color="off")
-        pct_str = f"{r['pct']:.1f}%" if r['pct'] is not None else "—"
+        pct_str = f"{r['pct']:.1f}%" if r["pct"] is not None else "—"
         cols[2].metric("PE%", pct_str, delta_color="off")
 
         if has_pb:
-            pb_str = f"{r['pb']:.2f}" if r['pb'] else "—"
+            pb_str = f"{r['pb']:.2f}" if r["pb"] else "—"
             cols[3].metric("PB", pb_str, delta_color="off")
-            pb_pct_str = f"{r['pb_pct']:.1f}%" if r['pb_pct'] else "—"
+            pb_pct_str = f"{r['pb_pct']:.1f}%" if r["pb_pct"] else "—"
             cols[4].metric("PB%", pb_pct_str, delta_color="off")
         else:
             cols[3].metric("PB", "—", delta_color="off")
@@ -86,8 +85,7 @@ def _make_percentile_chart(df, label_name):
         valid = pct.dropna()
         if len(valid) < 5:
             continue
-        ax.plot(valid.index.values, valid.values, lw=1.2,
-                label=f"{year}年滚动百分位", color=colors[year])
+        ax.plot(valid.index.values, valid.values, lw=1.2, label=f"{year}年滚动百分位", color=colors[year])
 
     ax.axhline(70, ls="--", lw=0.8, color="#f44336", alpha=0.5)
     ax.axhline(30, ls="--", lw=0.8, color="#4CAF50", alpha=0.5)
@@ -100,8 +98,7 @@ def _make_percentile_chart(df, label_name):
     # 叠加原始 PE/PB 数值
     ax2 = ax.twinx()
     value_label = label_name.split(" ")[-1] if " " in label_name else "Value"
-    ax2.plot(df["date"], df["value"], lw=1.5, color="#555555", alpha=0.7,
-             label=f"{value_label}")
+    ax2.plot(df["date"], df["value"], lw=1.5, color="#555555", alpha=0.7, label=f"{value_label}")
     ax2.set_ylabel(value_label, color="#555555")
     ax2.tick_params(axis="y", labelcolor="#555555")
 

@@ -35,7 +35,8 @@ def classify_pension_category(row):
 
 
 PENSION_CATEGORIES = [
-    "全部", "指数基金",
+    "全部",
+    "指数基金",
     "FOF-目标日期",
     "FOF-目标风险-稳健",
     "FOF-目标风险-均衡",
@@ -62,7 +63,8 @@ def fetch_pension_funds():
 
     result = y_funds.merge(
         nav[["基金代码", "单位净值", "累计净值", "日增长率", "日期"]],
-        on="基金代码", how="left",
+        on="基金代码",
+        how="left",
     )
     result = result.rename(columns={"日期": "净值日期"})
     result["养老金分类"] = result.apply(classify_pension_category, axis=1)
@@ -87,6 +89,8 @@ def sort_pension_funds(result, sort_by):
 __all__ = [
     "PENSION_CATEGORIES",
     "SORT_OPTIONS",
-    "fetch_pension_funds", "filter_pension_funds",
-    "enrich_pension_fees", "sort_pension_funds",
+    "fetch_pension_funds",
+    "filter_pension_funds",
+    "enrich_pension_fees",
+    "sort_pension_funds",
 ]

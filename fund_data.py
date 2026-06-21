@@ -29,11 +29,6 @@ def parse_fee_pct(v):
         return None
 
 
-
-
-
-
-
 def _parse_scale(s):
     if not s:
         return None
@@ -67,7 +62,11 @@ def _fetch_one_overview(code):
         establish_full = str(row.get("成立日期/规模")) if pd.notna(row.get("成立日期/规模")) else None
         establish_date = establish_full.split(" / ")[0] if establish_full else None
         return (
-            mgmt, cust, sales_service, scale, scale_shares,
+            mgmt,
+            cust,
+            sales_service,
+            scale,
+            scale_shares,
             str(row.get("发行日期")) or None,
             establish_date,
             str(row.get("基金管理人")) or None,
@@ -128,8 +127,12 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
 
     if not uncached:
         return (
-            mgmt_map, cust_map, sales_service_map,
-            scale_map, purchase_map, min_purchase_map,
+            mgmt_map,
+            cust_map,
+            sales_service_map,
+            scale_map,
+            purchase_map,
+            min_purchase_map,
             scale_shares_map,
         )
 
@@ -140,9 +143,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         for _, row in purchase_idx.iterrows():
             code = row["基金代码"]
             purchase_map[code] = _parse_purchase(row.get("手续费"))
-            min_purchase_map[code] = (
-                str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None
-            )
+            min_purchase_map[code] = str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None
     except Exception:
         pass
 
@@ -152,7 +153,6 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         progress_placeholder.markdown(f"正在获取费率信息… (0/{total})")
 
     done = 0
-    t0 = __import__("time").time()
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
         fut_map = {pool.submit(_fetch_one_overview, c): c for c in uncached}
         for f in concurrent.futures.as_completed(fut_map):
@@ -160,9 +160,20 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
             code = fut_map[f]
             result = f.result()
             if result is not None:
-                (mgmt, cust, sales_service, scale, scale_shares,
-                 issue_date, establish_date, mgr, custodian,
-                 fund_mgr, benchmark, track_index) = result
+                (
+                    mgmt,
+                    cust,
+                    sales_service,
+                    scale,
+                    scale_shares,
+                    issue_date,
+                    establish_date,
+                    mgr,
+                    custodian,
+                    fund_mgr,
+                    benchmark,
+                    track_index,
+                ) = result
                 mgmt_map[code] = mgmt
                 cust_map[code] = cust
                 sales_service_map[code] = sales_service
@@ -178,21 +189,21 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
                     if mgmt is not None and cust is not None
                     else None
                 )
-                db.save_fund_fee(code, purchase, mgmt, cust, sales_service,
-                                 min_purchase, total_fee)
+                db.save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
                 db.save_fund_scale(code, scale, scale_shares)
-                db.save_fund_profile(code, issue_date, establish_date, mgr,
-                                     custodian, fund_mgr, benchmark, track_index)
+                db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
 
             if progress_placeholder:
                 pct = int(done / total * 100) if total else 100
-                progress_placeholder.markdown(
-                    f"正在获取费率信息… ({done}/{total}, {pct}%)"
-                )
+                progress_placeholder.markdown(f"正在获取费率信息… ({done}/{total}, {pct}%)")
 
     return (
-        mgmt_map, cust_map, sales_service_map,
-        scale_map, purchase_map, min_purchase_map,
+        mgmt_map,
+        cust_map,
+        sales_service_map,
+        scale_map,
+        purchase_map,
+        min_purchase_map,
         scale_shares_map,
     )
 
@@ -207,17 +218,19 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
     codes = result["基金代码"].tolist()
 
     (
-        mgmt_map, cust_map, sales_service_map,
-        scale_map, purchase_map, min_purchase_map,
+        mgmt_map,
+        cust_map,
+        sales_service_map,
+        scale_map,
+        purchase_map,
+        min_purchase_map,
         scale_shares_map,
     ) = fetch_mgmt_cust_fees(codes, progress_placeholder)
 
     if "基金规模" in result.columns:
         missing = result["基金规模"].isna()
         if missing.any():
-            result.loc[missing, "基金规模"] = (
-                result.loc[missing, "基金代码"].map(scale_map)
-            )
+            result.loc[missing, "基金规模"] = result.loc[missing, "基金代码"].map(scale_map)
     elif scale_source is not None:
         s_map = scale_source.set_index("基金代码")["基金规模"].to_dict()
         result["基金规模"] = result["基金代码"].map(s_map)
@@ -230,18 +243,14 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
     # 净资产规模缺失时用 份额规模 × 单位净值 兜底
     still_missing = result["基金规模"].isna()
     if still_missing.any():
-        result["基金规模"] = result["基金规模"].fillna(
-            (nav * result["基金代码"].map(scale_shares_map)).round(2)
-        )
+        result["基金规模"] = result["基金规模"].fillna((nav * result["基金代码"].map(scale_shares_map)).round(2))
     # 费率: 申购费优先取 result 中已有手续费列，缺失则从缓存补
     if "手续费" in result.columns:
         fee_raw = result["手续费"].astype(str).str.replace("%", "", regex=False)
         result["申购费"] = pd.to_numeric(fee_raw, errors="coerce")
         missing_purchase = result["申购费"].isna()
         if missing_purchase.any():
-            result.loc[missing_purchase, "申购费"] = (
-                result.loc[missing_purchase, "基金代码"].map(purchase_map)
-            )
+            result.loc[missing_purchase, "申购费"] = result.loc[missing_purchase, "基金代码"].map(purchase_map)
     else:
         result["申购费"] = result["基金代码"].map(purchase_map)
 
@@ -254,9 +263,7 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
     mgmt = result["管理费"]
     cust = result["托管费"]
     sales = result["销售服务费"].fillna(0)
-    result["综合费率"] = ((purchase + mgmt + cust + sales).round(2)).where(
-        mgmt.notna() & cust.notna(), pd.NA
-    )
+    result["综合费率"] = ((purchase + mgmt + cust + sales).round(2)).where(mgmt.notna() & cust.notna(), pd.NA)
     return result
 
 

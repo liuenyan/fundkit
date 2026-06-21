@@ -22,15 +22,33 @@ logging.basicConfig(
 _TODAY = datetime.now().strftime("%Y%m%d")
 
 CONFIG = [
-    {"name": "沪深300", "source": "csindex", "param": "000300",
-     "pb": True, "pb_source": "index_lg", "pb_param": "沪深300"},
-    {"name": "中证500", "source": "csindex", "param": "000905",
-     "pb": True, "pb_source": "index_lg", "pb_param": "中证500"},
+    {
+        "name": "沪深300",
+        "source": "csindex",
+        "param": "000300",
+        "pb": True,
+        "pb_source": "index_lg",
+        "pb_param": "沪深300",
+    },
+    {
+        "name": "中证500",
+        "source": "csindex",
+        "param": "000905",
+        "pb": True,
+        "pb_source": "index_lg",
+        "pb_param": "中证500",
+    },
     {"name": "中证红利", "source": "csindex", "param": "000922"},
     {"name": "红利低波", "source": "csindex", "param": "H30269"},
     {"name": "CS消费50", "source": "csindex", "param": "931139"},
-    {"name": "创业板50", "source": "index_lg", "param": "创业板50",
-     "pb": True, "pb_source": "index_lg", "pb_param": "创业板50"},
+    {
+        "name": "创业板50",
+        "source": "index_lg",
+        "param": "创业板50",
+        "pb": True,
+        "pb_source": "index_lg",
+        "pb_param": "创业板50",
+    },
 ]
 
 VALUATION_BANDS = [(0, 30, "低估"), (30, 70, "适中"), (70, 100, "高估")]
@@ -64,10 +82,9 @@ def rolling_percentile(df, window_days, min_periods=60):
 
 # ── 底层 API 请求（不含缓存） ──
 
+
 def _fetch_csindex_pe(param):
-    df = ak.stock_zh_index_hist_csindex(
-        param, start_date="20000101", end_date=_TODAY
-    )
+    df = ak.stock_zh_index_hist_csindex(param, start_date="20000101", end_date=_TODAY)
     col = "滚动市盈率"
     if df is None or df.empty or col not in df.columns:
         logger.warning("获取 %s PE 失败：数据为空或缺少 %s 列", param, col)
@@ -78,9 +95,7 @@ def _fetch_csindex_pe(param):
 
 
 def _fetch_csindex_price(param):
-    df = ak.stock_zh_index_hist_csindex(
-        param, start_date="20000101", end_date=_TODAY
-    )
+    df = ak.stock_zh_index_hist_csindex(param, start_date="20000101", end_date=_TODAY)
     col = "收盘"
     if df is None or df.empty or col not in df.columns:
         logger.warning("获取 %s 点位失败：数据为空或缺少 %s 列", param, col)
@@ -217,6 +232,7 @@ def _get_series(cfg, metric="pe"):
 
 # ── 公开接口 ──
 
+
 def fetch_all():
     results = []
     for cfg in CONFIG:
@@ -252,8 +268,7 @@ def fetch_series_all():
         name = cfg["name"]
         try:
             df_pe, _ = _get_series(cfg, "pe")
-            r = {"name": name, "pe": df_pe if not df_pe.empty else None,
-                 "pb": None, "price": None}
+            r = {"name": name, "pe": df_pe if not df_pe.empty else None, "pb": None, "price": None}
             if cfg.get("pb"):
                 df_pb, _ = _get_series(cfg, "pb")
                 r["pb"] = df_pb if not df_pb.empty else None
@@ -282,8 +297,18 @@ def _fetch_dividend_yield(_=None):
     if indicator is None or indicator.empty:
         logger.warning("获取中证红利指标数据失败，无法校准股息率")
         return None
-    indicator.columns = ["date", "code", "full_name_cn", "short_name_cn",
-                         "full_name_en", "short_name_en", "pe1", "pe2", "dp1", "dp2"]
+    indicator.columns = [
+        "date",
+        "code",
+        "full_name_cn",
+        "short_name_cn",
+        "full_name_en",
+        "short_name_en",
+        "pe1",
+        "pe2",
+        "dp1",
+        "dp2",
+    ]
     latest = indicator.iloc[0]
     dp1 = latest["dp1"]
     pe1 = latest["pe1"]
@@ -292,8 +317,7 @@ def _fetch_dividend_yield(_=None):
         return None
     payout_ratio = dp1 * pe1 / 100
 
-    pe_df, _ = get_or_update_series("中证红利", "pe", "csindex",
-                                    lambda: _fetch_csindex_pe("000922"))
+    pe_df, _ = get_or_update_series("中证红利", "pe", "csindex", lambda: _fetch_csindex_pe("000922"))
     if pe_df is None or pe_df.empty:
         logger.warning("获取中证红利历史PE失败，无法估算股息率")
         return None
@@ -316,6 +340,5 @@ def fetch_bond_yield_10y():
 
 
 def fetch_dividend_yield():
-    df, _ = get_or_update_series("中证红利", "dividend_yield", "csindex_indicator",
-                                 _fetch_dividend_yield)
+    df, _ = get_or_update_series("中证红利", "dividend_yield", "csindex_indicator", _fetch_dividend_yield)
     return df if not df.empty else None

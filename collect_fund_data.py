@@ -57,7 +57,11 @@ def fetch_one_overview(code):
         establish_full = str(row.get("成立日期/规模")) if pd.notna(row.get("成立日期/规模")) else None
         establish_date = establish_full.split(" / ")[0] if establish_full else None
         return (
-            mgmt, cust, sales_service, scale, scale_shares,
+            mgmt,
+            cust,
+            sales_service,
+            scale,
+            scale_shares,
             str(row.get("发行日期")) or None,
             establish_date,
             str(row.get("基金管理人")) or None,
@@ -122,9 +126,20 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
             if result is None:
                 failed += 1
             else:
-                (mgmt, cust, sales_service, scale, scale_shares,
-                 issue_date, establish_date, mgr, custodian,
-                 fund_mgr, benchmark, track_index) = result
+                (
+                    mgmt,
+                    cust,
+                    sales_service,
+                    scale,
+                    scale_shares,
+                    issue_date,
+                    establish_date,
+                    mgr,
+                    custodian,
+                    fund_mgr,
+                    benchmark,
+                    track_index,
+                ) = result
                 cached = load_cached.get(code, {})
                 purchase = cached.get("申购费")
                 min_purchase = cached.get("起购金额")
@@ -135,21 +150,25 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
                     else None
                 )
                 db.save_fund_fee(
-                    code, purchase, mgmt, cust, sales_service,
-                    min_purchase, total_fee,
+                    code,
+                    purchase,
+                    mgmt,
+                    cust,
+                    sales_service,
+                    min_purchase,
+                    total_fee,
                 )
                 db.save_fund_scale(code, scale, scale_shares)
-                db.save_fund_profile(code, issue_date, establish_date, mgr,
-                                     custodian, fund_mgr, benchmark, track_index)
+                db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
                 success += 1
 
             elapsed = time.time() - t0
             rate = done / elapsed if elapsed > 0 else 0
             eta = (total - done) / rate if rate > 0 else 0
             print(
-                f"\r  [{done}/{total}] 成功 {success}, 失败 {failed}, "
-                f"速率 {rate:.1f} 只/秒, 预计剩余 {eta:.0f}s",
-                end="", flush=True,
+                f"\r  [{done}/{total}] 成功 {success}, 失败 {failed}, 速率 {rate:.1f} 只/秒, 预计剩余 {eta:.0f}s",
+                end="",
+                flush=True,
             )
 
     print()
@@ -197,7 +216,8 @@ def collect_tracking_method():
     print("\nStep 4 — 名称启发式兜底跟踪方式…")
     with db.engine.begin() as conn:
         # 先标记增强：名称含 增强 / 量化 / 指增
-        result = conn.execute(db.text("""
+        result = conn.execute(
+            db.text("""
             UPDATE fund_profile SET 跟踪方式 = '增强指数型'
             WHERE (跟踪方式 IS NULL OR 跟踪方式 = '')
               AND 基金代码 IN (
@@ -205,18 +225,21 @@ def collect_tracking_method():
                 WHERE 基金类型 LIKE '指数型-%'
                   AND (基金简称 LIKE '%增强%' OR 基金简称 LIKE '%量化%' OR 基金简称 LIKE '%指增%')
               )
-        """))
+        """)
+        )
         enhanced_cnt = result.rowcount
 
         # 剩余全部标记为被动
-        result = conn.execute(db.text("""
+        result = conn.execute(
+            db.text("""
             UPDATE fund_profile SET 跟踪方式 = '被动指数型'
             WHERE (跟踪方式 IS NULL OR 跟踪方式 = '')
               AND 基金代码 IN (
                 SELECT 基金代码 FROM fund_catalog
                 WHERE 基金类型 LIKE '指数型-%'
               )
-        """))
+        """)
+        )
         passive_cnt = result.rowcount
 
     print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
@@ -292,15 +315,17 @@ def collect_fund_nav(force=False):
                 print(f"  ! 缺少 {growth_col} 列，跳过")
             else:
                 for _, r in open_df.iterrows():
-                    rows.append({
-                        "基金代码": str(r["基金代码"]),
-                        "日期": date_str,
-                        "单位净值": _to_float(r.get(nav_col)),
-                        "累计净值": _to_float(r.get(cum_col)),
-                        "日增长率": _parse_daily_pct(r.get(growth_col)),
-                        "数据来源": "open",
-                        "updated_at": ts,
-                    })
+                    rows.append(
+                        {
+                            "基金代码": str(r["基金代码"]),
+                            "日期": date_str,
+                            "单位净值": _to_float(r.get(nav_col)),
+                            "累计净值": _to_float(r.get(cum_col)),
+                            "日增长率": _parse_daily_pct(r.get(growth_col)),
+                            "数据来源": "open",
+                            "updated_at": ts,
+                        }
+                    )
                 print(f"  → 已解析 {len(rows)} 只开放基金（{date_str}）")
 
     # ── Source 2: fund_etf_fund_daily_em（补 ETF，覆盖新代码） ──
@@ -326,15 +351,17 @@ def collect_fund_nav(force=False):
                     code = str(r["基金代码"])
                     if code in existing_codes:
                         continue
-                    rows.append({
-                        "基金代码": code,
-                        "日期": date_str2,
-                        "单位净值": _to_float(r.get(nav_col2)),
-                        "累计净值": _to_float(r.get(cum_col2)),
-                        "日增长率": _parse_daily_pct(r.get(growth_col2)),
-                        "数据来源": "etf",
-                        "updated_at": ts,
-                    })
+                    rows.append(
+                        {
+                            "基金代码": code,
+                            "日期": date_str2,
+                            "单位净值": _to_float(r.get(nav_col2)),
+                            "累计净值": _to_float(r.get(cum_col2)),
+                            "日增长率": _parse_daily_pct(r.get(growth_col2)),
+                            "数据来源": "etf",
+                            "updated_at": ts,
+                        }
+                    )
                     etf_added += 1
                 print(f"  → 新增 {etf_added} 只 ETF（{date_str2}）")
 
@@ -353,15 +380,17 @@ def collect_fund_nav(force=False):
             code = str(r["基金代码"])
             if code in existing_codes:
                 continue
-            rows.append({
-                "基金代码": code,
-                "日期": str(r.get("日期", "")),
-                "单位净值": _to_float(r.get("单位净值")),
-                "累计净值": _to_float(r.get("累计净值")),
-                "日增长率": _parse_daily_pct(r.get("日增长率")),
-                "数据来源": "fof",
-                "updated_at": ts,
-            })
+            rows.append(
+                {
+                    "基金代码": code,
+                    "日期": str(r.get("日期", "")),
+                    "单位净值": _to_float(r.get("单位净值")),
+                    "累计净值": _to_float(r.get("累计净值")),
+                    "日增长率": _parse_daily_pct(r.get("日增长率")),
+                    "数据来源": "fof",
+                    "updated_at": ts,
+                }
+            )
             fof_added += 1
         print(f"  → 新增 {fof_added} 只 FOF（{fof_df.iloc[0].get('日期', '')}）")
 

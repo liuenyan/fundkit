@@ -114,21 +114,38 @@ for i, (_, row) in enumerate(result.iterrows()):
         cols[3].markdown(f"净值: {_fmt_nav(row['单位净值'])}")
         cols[4].markdown(f"费率: {_fmt_total_fee(row)}")
         cols[5].markdown(f"规模: {_fmt_scale(row.get('基金规模'))}")
-        if cols[6].button("📊 定投回测", key=f"dca_{row['基金代码']}_{i}",
-                          use_container_width=True):
+        if cols[6].button("📊 定投回测", key=f"dca_{row['基金代码']}_{i}", use_container_width=True):
             st.switch_page("app_pages/dca.py", query_params={"fund": row["基金代码"]})
 
 with st.expander("📋 完整列表", expanded=False):
-    detail_cols = ["基金代码", "基金名称", "养老金分类", "基金类型",
-                   "单位净值", "净值日期", "日增长率",
-                    "申购费", "销售服务费", "管理费", "托管费", "综合费率", "基金规模"]
+    detail_cols = [
+        "基金代码",
+        "基金名称",
+        "养老金分类",
+        "基金类型",
+        "单位净值",
+        "净值日期",
+        "日增长率",
+        "申购费",
+        "销售服务费",
+        "管理费",
+        "托管费",
+        "综合费率",
+        "基金规模",
+    ]
     detail_map = {
-        "基金代码": "代码", "基金名称": "基金名称",
-        "养老金分类": "分类", "基金类型": "基金类型",
-        "单位净值": "最新净值", "净值日期": "净值日期",
+        "基金代码": "代码",
+        "基金名称": "基金名称",
+        "养老金分类": "分类",
+        "基金类型": "基金类型",
+        "单位净值": "最新净值",
+        "净值日期": "净值日期",
         "日增长率": "日涨跌",
-        "申购费": "申购费", "销售服务费": "销售服务费",
-        "管理费": "管理费", "托管费": "托管费", "综合费率": "综合费率",
+        "申购费": "申购费",
+        "销售服务费": "销售服务费",
+        "管理费": "管理费",
+        "托管费": "托管费",
+        "综合费率": "综合费率",
         "基金规模": "基金规模",
     }
     detail_df = result[[c for c in detail_cols if c in result.columns]].copy()
@@ -141,9 +158,21 @@ with st.expander("📋 完整列表", expanded=False):
     detail_df["托管费"] = detail_df["托管费"].apply(_fmt_pct)
     detail_df["基金规模"] = detail_df["基金规模"].apply(_fmt_scale)
     detail_df["综合费率"] = detail_df.apply(_fmt_total_fee, axis=1)
-    display_cols = ["基金代码", "基金名称", "分类", "最新净值", "日涨跌",
-                    "综合费率", "申购费", "管理费", "托管费", "销售服务费", "基金规模"]
+    display_cols = [
+        "基金代码",
+        "基金名称",
+        "分类",
+        "最新净值",
+        "日涨跌",
+        "综合费率",
+        "申购费",
+        "管理费",
+        "托管费",
+        "销售服务费",
+        "基金规模",
+    ]
     st.dataframe(
         detail_df[[c for c in display_cols if c in detail_df.columns]],
-        hide_index=True, use_container_width=True,
+        hide_index=True,
+        use_container_width=True,
     )

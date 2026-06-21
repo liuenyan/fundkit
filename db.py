@@ -140,24 +140,22 @@ def init_db():
     # 迁移: fund_fee → fund_scale 拆分（旧库）
     try:
         with engine.connect() as conn:
-            cols = [row[1] for row in conn.execute(
-                text("PRAGMA table_info(fund_fee)")
-            ).fetchall()]
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(fund_fee)")).fetchall()]
             if "净资产规模" in cols:
-                conn.execute(text("""
+                conn.execute(
+                    text("""
                     INSERT OR IGNORE INTO fund_scale (基金代码, 净资产规模, updated_at)
                     SELECT 基金代码, 净资产规模, updated_at FROM fund_fee
                     WHERE 净资产规模 IS NOT NULL
-                """))
+                """)
+                )
                 conn.execute(text("ALTER TABLE fund_fee DROP COLUMN 净资产规模"))
     except Exception:
         pass
     # 迁移: fund_scale 追加份额规模列
     try:
         with engine.connect() as conn:
-            cols = [row[1] for row in conn.execute(
-                text("PRAGMA table_info(fund_scale)")
-            ).fetchall()]
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(fund_scale)")).fetchall()]
             if "份额规模" not in cols:
                 conn.execute(text("ALTER TABLE fund_scale ADD COLUMN 份额规模 Float"))
     except Exception:
@@ -165,9 +163,7 @@ def init_db():
     # 迁移: fund_profile 追加跟踪方式列
     try:
         with engine.connect() as conn:
-            cols = [row[1] for row in conn.execute(
-                text("PRAGMA table_info(fund_profile)")
-            ).fetchall()]
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(fund_profile)")).fetchall()]
             if "跟踪方式" not in cols:
                 conn.execute(text("ALTER TABLE fund_profile ADD COLUMN 跟踪方式 String"))
     except Exception:
@@ -192,7 +188,8 @@ def init_db():
 def load_series(name, metric):
     return pd.read_sql_query(
         "SELECT date, value FROM index_series WHERE name=? AND metric=? ORDER BY date",
-        engine, params=(name, metric),
+        engine,
+        params=(name, metric),
     )
 
 
@@ -201,8 +198,7 @@ def upsert_series(name, metric, df):
         for _, row in df.iterrows():
             conn.execute(
                 index_series.insert().prefix_with("OR IGNORE"),
-                {"name": name, "metric": metric,
-                 "date": str(row["date"]), "value": float(row["value"])},
+                {"name": name, "metric": metric, "date": str(row["date"]), "value": float(row["value"])},
             )
 
 
@@ -228,8 +224,7 @@ def set_cache_meta(name, metric, source):
     with engine.begin() as conn:
         conn.execute(
             cache_meta.insert().prefix_with("OR REPLACE"),
-            {"name": name, "metric": metric,
-             "last_updated": today, "source": source},
+            {"name": name, "metric": metric, "last_updated": today, "source": source},
         )
 
 
@@ -278,11 +273,16 @@ def save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total
     with engine.begin() as conn:
         conn.execute(
             fund_fee.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code,
-             "申购费": purchase, "管理费": mgmt, "托管费": cust,
-             "销售服务费": sales_service, "起购金额": min_purchase,
-             "综合费率": total,
-             "updated_at": time.time()},
+            {
+                "基金代码": code,
+                "申购费": purchase,
+                "管理费": mgmt,
+                "托管费": cust,
+                "销售服务费": sales_service,
+                "起购金额": min_purchase,
+                "综合费率": total,
+                "updated_at": time.time(),
+            },
         )
 
 
@@ -312,8 +312,7 @@ def save_fund_scale(code, scale, shares=None):
     with engine.begin() as conn:
         conn.execute(
             fund_scale.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code, "净资产规模": scale,
-             "份额规模": shares, "updated_at": time.time()},
+            {"基金代码": code, "净资产规模": scale, "份额规模": shares, "updated_at": time.time()},
         )
 
 
@@ -349,9 +348,7 @@ def is_fund_nav_fresh(ttl=None):
         ttl = NAV_TTL
     try:
         with engine.connect() as conn:
-            row = conn.execute(
-                text("SELECT updated_at FROM funds_meta WHERE key='fund_nav'")
-            ).fetchone()
+            row = conn.execute(text("SELECT updated_at FROM funds_meta WHERE key='fund_nav'")).fetchone()
             if row and row[0]:
                 return time.time() - row[0] < ttl
     except Exception:
@@ -369,7 +366,8 @@ def load_index_fund_nav():
     """JOIN fund_nav + fund_catalog + fund_profile 返回指数基金净值+跟踪方式。"""
     try:
         with engine.connect() as conn:
-            return pd.read_sql(text("""
+            return pd.read_sql(
+                text("""
                 SELECT
                     nav.基金代码,
                     cat.基金简称 AS 基金名称,
@@ -387,7 +385,9 @@ def load_index_fund_nav():
                 JOIN fund_catalog cat ON nav.基金代码 = cat.基金代码
                 LEFT JOIN fund_profile pf ON nav.基金代码 = pf.基金代码
                 WHERE cat.基金类型 LIKE '指数型-%'
-            """), conn)
+            """),
+                conn,
+            )
     except Exception:
         return None
 
@@ -417,17 +417,25 @@ def load_fund_profile(codes):
     return result
 
 
-def save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index, track_method=None):
+def save_fund_profile(
+    code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index, track_method=None
+):
     """写入单只基金基本信息。"""
     with engine.begin() as conn:
         conn.execute(
             fund_profile.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code, "发行日期": issue_date,
-             "成立日期": establish_date, "基金管理人": mgr,
-             "基金托管人": custodian, "基金经理": fund_mgr,
-             "业绩比较基准": benchmark, "跟踪标的": track_index,
-             "跟踪方式": track_method,
-             "updated_at": time.time()},
+            {
+                "基金代码": code,
+                "发行日期": issue_date,
+                "成立日期": establish_date,
+                "基金管理人": mgr,
+                "基金托管人": custodian,
+                "基金经理": fund_mgr,
+                "业绩比较基准": benchmark,
+                "跟踪标的": track_index,
+                "跟踪方式": track_method,
+                "updated_at": time.time(),
+            },
         )
 
 
@@ -473,9 +481,7 @@ def is_catalog_fresh(ttl=None):
         ttl = CATALOG_TTL
     try:
         with engine.connect() as conn:
-            row = conn.execute(
-                text("SELECT updated_at FROM funds_meta WHERE key='fund_catalog'")
-            ).fetchone()
+            row = conn.execute(text("SELECT updated_at FROM funds_meta WHERE key='fund_catalog'")).fetchone()
             if row and row[0]:
                 return time.time() - row[0] < ttl
     except Exception:
@@ -495,9 +501,7 @@ def is_fee_cache_fresh(ttl=None):
         ttl = FEE_TTL
     try:
         with engine.connect() as conn:
-            row = conn.execute(
-                text("SELECT updated_at FROM funds_meta WHERE key='fund_fee'")
-            ).fetchone()
+            row = conn.execute(text("SELECT updated_at FROM funds_meta WHERE key='fund_fee'")).fetchone()
             if row and row[0]:
                 return time.time() - row[0] < ttl
     except Exception:
