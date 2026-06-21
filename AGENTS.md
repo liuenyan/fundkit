@@ -19,7 +19,7 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 - **Rename rule**: 同名文件重命名必须用 `git mv`，否则 git 不识别
 - **Code style**: ruff (line-length=120, target-version=py311), managed via `requirements-dev.txt`
 - **Chart output**: `./charts/<fund_code>_dca_backtest.png` (Auto, `matplotlib.use("Agg")`)
-- **CJK fonts**: `cjk_font.py` — `setup_cjk_font()` via `mpl.font_manager.findfont`
+- **CJK fonts**: `tools/cjk_font.py` — `setup_cjk_font()` via `mpl.font_manager.findfont`
 - **Backtest core**: `simulate_dca()` at line 184, returns `(detail_df, events_list, redeem_fee, final_val)`
 - **Two stop-profit strategies**:
   - **A**: `--take-profit` + `--tp-cycle` (目标止盈，达阈值即卖出)

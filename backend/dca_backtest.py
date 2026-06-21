@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from cjk_font import setup_cjk_font
+from tools.cjk_font import setup_cjk_font
 
 try:
     import akshare as ak

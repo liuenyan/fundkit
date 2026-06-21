@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from cjk_font import setup_cjk_font
+from tools.cjk_font import setup_cjk_font
 
 from backend.dca_backtest import (
     fetch_fund_data as _fetch_fund_data,
