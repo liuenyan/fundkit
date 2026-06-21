@@ -17,7 +17,6 @@ TTL: 费率 90 天 / 净值 24 小时
 """
 
 import argparse
-import concurrent.futures
 import re
 import sys
 import time
@@ -26,7 +25,7 @@ import akshare as ak
 import pandas as pd
 
 import db
-from backend.fund_data import fetch_one_overview, parse_purchase
+from backend.fund_data import parse_purchase, batch_fetch_overview
 
 
 
@@ -72,60 +71,39 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
     failed = 0
 
     load_cached = db.load_fund_fees(all_codes)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
-        fut_map = {pool.submit(fetch_one_overview, code): code for code in all_codes}
-        done = 0
-        for f in concurrent.futures.as_completed(fut_map):
-            done += 1
-            code = fut_map[f]
-            result = f.result()
-            if result is None:
-                failed += 1
-            else:
-                (
-                    mgmt,
-                    cust,
-                    sales_service,
-                    scale,
-                    scale_shares,
-                    issue_date,
-                    establish_date,
-                    mgr,
-                    custodian,
-                    fund_mgr,
-                    benchmark,
-                    track_index,
-                ) = result
-                cached = load_cached.get(code, {})
-                purchase = cached.get("申购费")
-                min_purchase = cached.get("起购金额")
-                sales = sales_service if sales_service is not None else 0
-                total_fee = (
-                    round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
-                    if mgmt is not None and cust is not None
-                    else None
-                )
-                db.save_fund_fee(
-                    code,
-                    purchase,
-                    mgmt,
-                    cust,
-                    sales_service,
-                    min_purchase,
-                    total_fee,
-                )
-                db.save_fund_scale(code, scale, scale_shares)
-                db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
-                success += 1
 
-            elapsed = time.time() - t0
-            rate = done / elapsed if elapsed > 0 else 0
-            eta = (total - done) / rate if rate > 0 else 0
-            print(
-                f"\r  [{done}/{total}] 成功 {success}, 失败 {failed}, 速率 {rate:.1f} 只/秒, 预计剩余 {eta:.0f}s",
-                end="",
-                flush=True,
-            )
+    def _persist(code, result):
+        nonlocal success, failed
+        if result is None:
+            failed += 1
+            return
+        (
+            mgmt, cust, sales_service, scale, scale_shares,
+            issue_date, establish_date, mgr, custodian, fund_mgr,
+            benchmark, track_index,
+        ) = result
+        cached = load_cached.get(code, {})
+        purchase = cached.get("申购费")
+        min_purchase = cached.get("起购金额")
+        sales = sales_service if sales_service is not None else 0
+        total_fee = (
+            round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
+            if mgmt is not None and cust is not None
+            else None
+        )
+        db.save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
+        db.save_fund_scale(code, scale, scale_shares)
+        db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+        success += 1
+
+    for done, total in batch_fetch_overview(all_codes, _persist, max_workers):
+        elapsed = time.time() - t0
+        rate = done / elapsed if elapsed > 0 else 0
+        eta = (total - done) / rate if rate > 0 else 0
+        print(
+            f"\r  [{done}/{total}] 成功 {success}, 失败 {failed}, 速率 {rate:.1f} 只/秒, 预计剩余 {eta:.0f}s",
+            end="", flush=True,
+        )
 
     print()
     elapsed = time.time() - t0

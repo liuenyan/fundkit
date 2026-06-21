@@ -79,6 +79,20 @@ def fetch_one_overview(code):
         return None
 
 
+def batch_fetch_overview(codes, on_result, max_workers=10):
+    """并发调用 fetch_one_overview，对每个结果回调 on_result(code, 12字段元组或None)。
+    Yields (done, total) 供调用方处理进度。
+    """
+    total = len(codes)
+    done = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        fut_map = {pool.submit(fetch_one_overview, c): c for c in codes}
+        for f in concurrent.futures.as_completed(fut_map):
+            done += 1
+            on_result(fut_map[f], f.result())
+            yield done, total
+
+
 def parse_purchase(s):
     """解析 fund_purchase_em 的 手续费，用于批量获取申购费"""
     if pd.isna(s) or s is None:
@@ -152,50 +166,36 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
     if progress_placeholder and total > 0:
         progress_placeholder.markdown(f"正在获取费率信息… (0/{total})")
 
-    done = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
-        fut_map = {pool.submit(fetch_one_overview, c): c for c in uncached}
-        for f in concurrent.futures.as_completed(fut_map):
-            done += 1
-            code = fut_map[f]
-            result = f.result()
-            if result is not None:
-                (
-                    mgmt,
-                    cust,
-                    sales_service,
-                    scale,
-                    scale_shares,
-                    issue_date,
-                    establish_date,
-                    mgr,
-                    custodian,
-                    fund_mgr,
-                    benchmark,
-                    track_index,
-                ) = result
-                mgmt_map[code] = mgmt
-                cust_map[code] = cust
-                sales_service_map[code] = sales_service
-                scale_map[code] = scale
-                scale_shares_map[code] = scale_shares
+    def _persist(code, result):
+        if result is None:
+            return
+        (
+            mgmt, cust, sales_service, scale, scale_shares,
+            issue_date, establish_date, mgr, custodian, fund_mgr,
+            benchmark, track_index,
+        ) = result
+        mgmt_map[code] = mgmt
+        cust_map[code] = cust
+        sales_service_map[code] = sales_service
+        scale_map[code] = scale
+        scale_shares_map[code] = scale_shares
 
-                # 入库缓存
-                purchase = purchase_map.get(code)
-                min_purchase = min_purchase_map.get(code)
-                sales = sales_service if sales_service is not None else 0
-                total_fee = (
-                    round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
-                    if mgmt is not None and cust is not None
-                    else None
-                )
-                db.save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
-                db.save_fund_scale(code, scale, scale_shares)
-                db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+        purchase = purchase_map.get(code)
+        min_purchase = min_purchase_map.get(code)
+        sales = sales_service if sales_service is not None else 0
+        total_fee = (
+            round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
+            if mgmt is not None and cust is not None
+            else None
+        )
+        db.save_fund_fee(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
+        db.save_fund_scale(code, scale, scale_shares)
+        db.save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
 
-            if progress_placeholder:
-                pct = int(done / total * 100) if total else 100
-                progress_placeholder.markdown(f"正在获取费率信息… ({done}/{total}, {pct}%)")
+    for done, total in batch_fetch_overview(uncached, _persist, max_workers=10):
+        if progress_placeholder:
+            pct = int(done / total * 100) if total else 100
+            progress_placeholder.markdown(f"正在获取费率信息… ({done}/{total}, {pct}%)")
 
     return (
         mgmt_map,
