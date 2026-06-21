@@ -108,6 +108,21 @@ fund_scale = Table(
     metadata,
     Column("基金代码", String, primary_key=True),
     Column("净资产规模", Float),
+    Column("份额规模", Float),
+    Column("updated_at", Float),
+)
+
+fund_profile = Table(
+    "fund_profile",
+    metadata,
+    Column("基金代码", String, primary_key=True),
+    Column("发行日期", String),
+    Column("成立日期", String),
+    Column("基金管理人", String),
+    Column("基金托管人", String),
+    Column("基金经理", String),
+    Column("业绩比较基准", String),
+    Column("跟踪标的", String),
     Column("updated_at", Float),
 )
 
@@ -133,7 +148,7 @@ SCALE_TTL = 86400  # 规模缓存 24 小时
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
-    # 迁移: fund_fee → fund_scale 拆分
+    # 迁移: fund_fee → fund_scale 拆分（旧库）
     try:
         with engine.connect() as conn:
             cols = [row[1] for row in conn.execute(
@@ -146,6 +161,16 @@ def init_db():
                     WHERE 净资产规模 IS NOT NULL
                 """))
                 conn.execute(text("ALTER TABLE fund_fee DROP COLUMN 净资产规模"))
+    except Exception:
+        pass
+    # 迁移: fund_scale 追加份额规模列
+    try:
+        with engine.connect() as conn:
+            cols = [row[1] for row in conn.execute(
+                text("PRAGMA table_info(fund_scale)")
+            ).fetchall()]
+            if "份额规模" not in cols:
+                conn.execute(text("ALTER TABLE fund_scale ADD COLUMN 份额规模 Float"))
     except Exception:
         pass
 
@@ -291,7 +316,7 @@ def clear_fund_fees():
 
 
 def load_fund_scale(codes):
-    """从 fund_scale 表批量加载净资产规模，返回 {code: value}"""
+    """从 fund_scale 表批量加载规模，返回 {code: {"净资产规模": value, "份额规模": value}}"""
     if not codes:
         return {}
     result = {}
@@ -299,22 +324,65 @@ def load_fund_scale(codes):
         stmt = fund_scale.select().where(fund_scale.c.基金代码.in_(codes))
         rows = conn.execute(stmt).fetchall()
         for r in rows:
-            result[r[0]] = r[1]
+            result[r[0]] = {"净资产规模": r[1], "份额规模": r[2]}
     return result
 
 
-def save_fund_scale(code, scale):
-    """写入单只基金净资产规模。"""
+def save_fund_scale(code, scale, shares=None):
+    """写入单只基金规模数据。scale 为净资产规模（亿元），shares 为份额规模（亿份）。"""
     with engine.begin() as conn:
         conn.execute(
             fund_scale.insert().prefix_with("OR REPLACE"),
-            {"基金代码": code, "净资产规模": scale, "updated_at": time.time()},
+            {"基金代码": code, "净资产规模": scale,
+             "份额规模": shares, "updated_at": time.time()},
         )
 
 
 def clear_fund_scale():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM fund_scale"))
+
+
+# ── 基金基本信息缓存 ──
+
+
+def load_fund_profile(codes):
+    """从 fund_profile 表批量加载基金基本信息，返回 {code: {...}}"""
+    if not codes:
+        return {}
+    result = {}
+    with engine.connect() as conn:
+        stmt = fund_profile.select().where(fund_profile.c.基金代码.in_(codes))
+        rows = conn.execute(stmt).fetchall()
+        for r in rows:
+            result[r[0]] = {
+                "发行日期": r[1],
+                "成立日期": r[2],
+                "基金管理人": r[3],
+                "基金托管人": r[4],
+                "基金经理": r[5],
+                "业绩比较基准": r[6],
+                "跟踪标的": r[7],
+            }
+    return result
+
+
+def save_fund_profile(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index):
+    """写入单只基金基本信息。"""
+    with engine.begin() as conn:
+        conn.execute(
+            fund_profile.insert().prefix_with("OR REPLACE"),
+            {"基金代码": code, "发行日期": issue_date,
+             "成立日期": establish_date, "基金管理人": mgr,
+             "基金托管人": custodian, "基金经理": fund_mgr,
+             "业绩比较基准": benchmark, "跟踪标的": track_index,
+             "updated_at": time.time()},
+        )
+
+
+def clear_fund_profile():
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM fund_profile"))
 
 
 # ── 基金名录缓存 ──
@@ -401,3 +469,4 @@ def clear_all():
         conn.execute(text("DELETE FROM funds_meta"))
         conn.execute(text("DELETE FROM fund_fee"))
         conn.execute(text("DELETE FROM fund_scale"))
+        conn.execute(text("DELETE FROM fund_profile"))

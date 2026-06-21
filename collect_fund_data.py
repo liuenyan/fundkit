@@ -38,7 +38,7 @@ def parse_purchase(s):
 
 
 def fetch_one_fee(code):
-    """单只基金获取管理费/托管费/销售服务费/净资产规模"""
+    """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
     try:
         df = ak.fund_overview_em(symbol=code)
         if df.empty:
@@ -48,7 +48,19 @@ def fetch_one_fee(code):
         cust = parse_fee_pct(row.get("托管费率"))
         sales_service = parse_fee_pct(row.get("销售服务费率"))
         scale = _parse_scale(row.get("净资产规模"))
-        return mgmt, cust, sales_service, scale
+        scale_shares = _parse_scale(row.get("份额规模"))
+        establish_full = str(row.get("成立日期/规模")) if pd.notna(row.get("成立日期/规模")) else None
+        establish_date = establish_full.split(" / ")[0] if establish_full else None
+        return (
+            mgmt, cust, sales_service, scale, scale_shares,
+            str(row.get("发行日期")) or None,
+            establish_date,
+            str(row.get("基金管理人")) or None,
+            str(row.get("基金托管人")) or None,
+            str(row.get("基金经理人")) or None,
+            str(row.get("业绩比较基准")) or None,
+            str(row.get("跟踪标的")) or None,
+        )
     except Exception:
         return None
 
@@ -105,7 +117,9 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
             if result is None:
                 failed += 1
             else:
-                mgmt, cust, sales_service, scale = result
+                (mgmt, cust, sales_service, scale, scale_shares,
+                 issue_date, establish_date, mgr, custodian,
+                 fund_mgr, benchmark, track_index) = result
                 cached = load_cached.get(code, {})
                 purchase = cached.get("申购费")
                 min_purchase = cached.get("起购金额")
@@ -119,8 +133,9 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
                     code, purchase, mgmt, cust, sales_service,
                     min_purchase, total_fee,
                 )
-                if scale is not None:
-                    db.save_fund_scale(code, scale)
+                db.save_fund_scale(code, scale, scale_shares)
+                db.save_fund_profile(code, issue_date, establish_date, mgr,
+                                     custodian, fund_mgr, benchmark, track_index)
                 success += 1
 
             elapsed = time.time() - t0

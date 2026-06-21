@@ -53,7 +53,7 @@ def _parse_scale(s):
 
 
 def _fetch_one_overview(code):
-    """单只基金获取管理费/托管费/销售服务费/净资产规模"""
+    """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
     try:
         df = ak.fund_overview_em(symbol=code)
         if df.empty:
@@ -63,7 +63,19 @@ def _fetch_one_overview(code):
         cust = parse_fee_pct(row.get("托管费率"))
         sales_service = parse_fee_pct(row.get("销售服务费率"))
         scale = _parse_scale(row.get("净资产规模"))
-        return mgmt, cust, sales_service, scale
+        scale_shares = _parse_scale(row.get("份额规模"))
+        establish_full = str(row.get("成立日期/规模")) if pd.notna(row.get("成立日期/规模")) else None
+        establish_date = establish_full.split(" / ")[0] if establish_full else None
+        return (
+            mgmt, cust, sales_service, scale, scale_shares,
+            str(row.get("发行日期")) or None,
+            establish_date,
+            str(row.get("基金管理人")) or None,
+            str(row.get("基金托管人")) or None,
+            str(row.get("基金经理人")) or None,
+            str(row.get("业绩比较基准")) or None,
+            str(row.get("跟踪标的")) or None,
+        )
     except Exception:
         return None
 
@@ -82,9 +94,10 @@ def _parse_purchase(s):
 
 
 def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
-    """批量获取管理费/托管费/销售服务费。
+    """批量获取管理费/托管费/销售服务费/规模/档案。
     优先级: DB 缓存(预采集) → 天天基金(fund_overview_em, 并发) → 雪球兜底
-    返回 (mgmt_map, cust_map, sales_service_map, scale_map, purchase_map, min_purchase_map)
+    返回 (mgmt_map, cust_map, sales_service_map, scale_map, purchase_map,
+           min_purchase_map, scale_shares_map)
     """
     mgmt_map = {}
     cust_map = {}
@@ -92,10 +105,14 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
     scale_map = {}
     purchase_map = {}
     min_purchase_map = {}
+    scale_shares_map = {}
 
     # ── 从 DB 缓存读取 ──
     cached = db.load_fund_fees(codes)
-    scale_map = db.load_fund_scale(codes)
+    scale_raw = db.load_fund_scale(codes)
+    for c, v in scale_raw.items():
+        scale_map[c] = v["净资产规模"]
+        scale_shares_map[c] = v["份额规模"]
     uncached = []
     for c in codes:
         if c in cached:
@@ -113,6 +130,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         return (
             mgmt_map, cust_map, sales_service_map,
             scale_map, purchase_map, min_purchase_map,
+            scale_shares_map,
         )
 
     # ── 未缓存: 先用 fund_purchase_em 批量补申购费+起购金额 ──
@@ -142,11 +160,14 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
             code = fut_map[f]
             result = f.result()
             if result is not None:
-                mgmt, cust, sales_service, scale = result
+                (mgmt, cust, sales_service, scale, scale_shares,
+                 issue_date, establish_date, mgr, custodian,
+                 fund_mgr, benchmark, track_index) = result
                 mgmt_map[code] = mgmt
                 cust_map[code] = cust
                 sales_service_map[code] = sales_service
                 scale_map[code] = scale
+                scale_shares_map[code] = scale_shares
 
                 # 入库缓存
                 purchase = purchase_map.get(code)
@@ -159,8 +180,9 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
                 )
                 db.save_fund_fee(code, purchase, mgmt, cust, sales_service,
                                  min_purchase, total_fee)
-                if scale is not None:
-                    db.save_fund_scale(code, scale)
+                db.save_fund_scale(code, scale, scale_shares)
+                db.save_fund_profile(code, issue_date, establish_date, mgr,
+                                     custodian, fund_mgr, benchmark, track_index)
 
             if progress_placeholder:
                 pct = int(done / total * 100) if total else 100
@@ -171,6 +193,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
     return (
         mgmt_map, cust_map, sales_service_map,
         scale_map, purchase_map, min_purchase_map,
+        scale_shares_map,
     )
 
 
@@ -186,6 +209,7 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
     (
         mgmt_map, cust_map, sales_service_map,
         scale_map, purchase_map, min_purchase_map,
+        scale_shares_map,
     ) = fetch_mgmt_cust_fees(codes, progress_placeholder)
 
     if "基金规模" in result.columns:
@@ -203,9 +227,12 @@ def enrich_fee_scale(result, scale_source=None, progress_placeholder=None):
     else:
         result["基金规模"] = result["基金代码"].map(scale_map)
 
-
-
-
+    # 净资产规模缺失时用 份额规模 × 单位净值 兜底
+    still_missing = result["基金规模"].isna()
+    if still_missing.any():
+        result["基金规模"] = result["基金规模"].fillna(
+            (nav * result["基金代码"].map(scale_shares_map)).round(2)
+        )
     # 费率: 申购费优先取 result 中已有手续费列，缺失则从缓存补
     if "手续费" in result.columns:
         fee_raw = result["手续费"].astype(str).str.replace("%", "", regex=False)
