@@ -365,6 +365,33 @@ def clear_fund_nav():
         conn.execute(text("DELETE FROM funds_meta WHERE key='fund_nav'"))
 
 
+def load_index_fund_nav():
+    """JOIN fund_nav + fund_catalog + fund_profile 返回指数基金净值+跟踪方式。"""
+    try:
+        with engine.connect() as conn:
+            return pd.read_sql(text("""
+                SELECT
+                    nav.基金代码,
+                    cat.基金简称 AS 基金名称,
+                    nav.单位净值,
+                    nav.日期,
+                    nav.日增长率,
+                    COALESCE(pf.跟踪方式,
+                        CASE
+                            WHEN cat.基金简称 LIKE '%增强%' OR cat.基金简称 LIKE '%量化%' OR cat.基金简称 LIKE '%指增%'
+                            THEN '增强指数型' ELSE '被动指数型'
+                        END
+                    ) AS 跟踪方式,
+                    pf.跟踪标的
+                FROM fund_nav nav
+                JOIN fund_catalog cat ON nav.基金代码 = cat.基金代码
+                LEFT JOIN fund_profile pf ON nav.基金代码 = pf.基金代码
+                WHERE cat.基金类型 LIKE '指数型-%'
+            """), conn)
+    except Exception:
+        return None
+
+
 # ── 基金基本信息缓存 ──
 
 

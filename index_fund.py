@@ -48,39 +48,11 @@ COMMON_INDICES = [
 @st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
 def fetch_all_index_funds():
     db.init_db()
-    result = _load_index_funds_from_db()
+    result = db.load_index_fund_nav()
     if result is not None and not result.empty:
         return result
     st.error("净值数据尚未采集，请运行：`./venv/bin/python collect_fund_data.py --nav`")
     return pd.DataFrame()
-
-
-def _load_index_funds_from_db():
-    """从 fund_nav + fund_catalog + fund_profile 本地四表 JOIN 查询"""
-    try:
-        with db.engine.connect() as conn:
-            result = pd.read_sql(db.text("""
-                SELECT
-                    nav.基金代码,
-                    cat.基金简称 AS 基金名称,
-                    nav.单位净值,
-                    nav.日期,
-                    nav.日增长率,
-                    COALESCE(pf.跟踪方式,
-                        CASE
-                            WHEN cat.基金简称 LIKE '%增强%' OR cat.基金简称 LIKE '%量化%' OR cat.基金简称 LIKE '%指增%'
-                            THEN '增强指数型' ELSE '被动指数型'
-                        END
-                    ) AS 跟踪方式,
-                    pf.跟踪标的
-                FROM fund_nav nav
-                JOIN fund_catalog cat ON nav.基金代码 = cat.基金代码
-                LEFT JOIN fund_profile pf ON nav.基金代码 = pf.基金代码
-                WHERE cat.基金类型 LIKE '指数型-%'
-            """), conn)
-        return result
-    except Exception:
-        return None
 
 
 def _tokenize(query):
