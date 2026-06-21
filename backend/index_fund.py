@@ -108,6 +108,25 @@ def _tokenize(query):
 SORT_OPTIONS = fund_data.SORT_OPTIONS
 
 
+def _normalize_index_name(name):
+    """归一化跟踪标的：去掉常见后缀用于精确匹配"""
+    if not name or not isinstance(name, str):
+        return name
+    suffixes = [
+        "全收益指数",
+        "净收益指数",
+        "动态策略指数",
+        "策略指数",
+        "价格指数",
+        "行业指数",
+        "指数",
+    ]
+    for suffix in suffixes:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
 def classify_share_class(name):
     name_upper = str(name).upper().rstrip("①②③④⑤⑥⑦⑧⑨⑩")
     if name_upper.endswith("Y") or "Y类" in name_upper:
@@ -150,6 +169,20 @@ def sort_result(result, sort_by):
 def search_funds_by_index(df, index_name, sort_by=None):
     if not index_name:
         return pd.DataFrame()
+
+    # 第一阶段：跟踪标的精确匹配（归一化后）
+    if not df.empty and "跟踪标的" in df.columns:
+        normalized_query = _normalize_index_name(index_name)
+        track_mask = df["跟踪标的"].apply(
+            lambda x: _normalize_index_name(str(x)) == normalized_query if pd.notna(x) else False
+        )
+        result = df[track_mask].copy()
+        if not result.empty:
+            result = enrich_fee_scale(result)
+            result = sort_result(result, sort_by)
+            return result
+
+    # 第二阶段：基金名称子串匹配（原逻辑）
     pattern = re.escape(index_name)
     mask = df["基金名称"].str.contains(pattern, case=False, na=False, regex=True)
     result = df[mask].copy()
