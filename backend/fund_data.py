@@ -47,7 +47,7 @@ def _parse_scale(s):
         return None
 
 
-def _fetch_one_overview(code):
+def fetch_one_overview(code):
     """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
     try:
         df = ak.fund_overview_em(symbol=code)
@@ -79,7 +79,7 @@ def _fetch_one_overview(code):
         return None
 
 
-def _parse_purchase(s):
+def parse_purchase(s):
     """解析 fund_purchase_em 的 手续费，用于批量获取申购费"""
     if pd.isna(s) or s is None:
         return None
@@ -142,7 +142,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         purchase_idx = purchase_df[purchase_df["基金代码"].isin(uncached)]
         for _, row in purchase_idx.iterrows():
             code = row["基金代码"]
-            purchase_map[code] = _parse_purchase(row.get("手续费"))
+            purchase_map[code] = parse_purchase(row.get("手续费"))
             min_purchase_map[code] = str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None
     except Exception:
         pass
@@ -154,7 +154,7 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
 
     done = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
-        fut_map = {pool.submit(_fetch_one_overview, c): c for c in uncached}
+        fut_map = {pool.submit(fetch_one_overview, c): c for c in uncached}
         for f in concurrent.futures.as_completed(fut_map):
             done += 1
             code = fut_map[f]

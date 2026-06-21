@@ -26,52 +26,8 @@ import akshare as ak
 import pandas as pd
 
 import db
-from backend.fund_data import parse_fee_pct, _parse_scale
+from backend.fund_data import fetch_one_overview, parse_purchase
 
-
-def parse_purchase(s):
-    """解析 fund_purchase_em 的手续费，支持 '0.15%'、'---'、NaN"""
-    if pd.isna(s) or s is None:
-        return None
-    s = str(s).strip().replace("%", "").replace("---", "").strip()
-    if not s:
-        return None
-    try:
-        return float(s)
-    except (ValueError, TypeError):
-        return None
-
-
-def fetch_one_overview(code):
-    """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
-    try:
-        df = ak.fund_overview_em(symbol=code)
-        if df.empty:
-            return None
-        row = df.iloc[0]
-        mgmt = parse_fee_pct(row.get("管理费率"))
-        cust = parse_fee_pct(row.get("托管费率"))
-        sales_service = parse_fee_pct(row.get("销售服务费率"))
-        scale = _parse_scale(row.get("净资产规模"))
-        scale_shares = _parse_scale(row.get("份额规模"))
-        establish_full = str(row.get("成立日期/规模")) if pd.notna(row.get("成立日期/规模")) else None
-        establish_date = establish_full.split(" / ")[0] if establish_full else None
-        return (
-            mgmt,
-            cust,
-            sales_service,
-            scale,
-            scale_shares,
-            str(row.get("发行日期")) or None,
-            establish_date,
-            str(row.get("基金管理人")) or None,
-            str(row.get("基金托管人")) or None,
-            str(row.get("基金经理人")) or None,
-            str(row.get("业绩比较基准")) or None,
-            str(row.get("跟踪标的")) or None,
-        )
-    except Exception:
-        return None
 
 
 def collect_fund_data(max_workers=10, force=False, codes=None):
