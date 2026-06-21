@@ -36,31 +36,67 @@
 - 排序：费率、规模、净值
 - 一键跳转定投回测：点击即带参数跳转至定投回测页
 
+### 养老金选基
+
+筛选个人养老金账户可投资的 Y 份额基金，按类型（指数基金、FOF-目标日期、FOF-目标风险）分类展示，支持规模/费率排序。
+
+- 数据源全 DB 查询，零 API 冷启动
+- 自动加载 Y 份额净值、费率、规模
+- 管理费/托管费懒加载缓存（会话级）
+
 ## 架构
 
 ```
 fundkit/
-├── app.py                   # Streamlit 导航中枢（三个页面）
+├── app.py                   # Streamlit 导航中枢（四个页面）
 ├── dca_backtest.py          # 定投回测 CLI 主程序
+│
+├── collect_fund_data.py     # 批量预采集脚本（费率/规模/档案/净值/名录/跟踪方式）
+├── fund_data.py             # 基金数据共享层（费率解析、规模兜底等）
+├── db.py                    # SQLAlchemy Core 数据库层（SQLite，WAL 模式，9 张活跃表）
 │
 ├── index_valuation.py       # 指数估值百分位计算后端
 ├── index_fund.py            # 指数选基数据获取 + 搜索/筛选/排序
-├── db.py                    # SQLAlchemy Core 数据库层（SQLite）
+├── pension_fund.py          # 养老金选基后端
 │
 ├── app_pages/
 │   ├── dca.py               # 定投回测页面
 │   ├── index_valuation.py   # 指数估值页面
-│   └── index_fund.py        # 指数选基页面
+│   ├── index_fund.py        # 指数选基页面
+│   └── pension_fund.py      # 养老金选基页面（Y 份额）
 │
 ├── cjk_font.py              # 中文字体检测与设置
 ├── data/                    # SQLite 数据库目录（自动创建）
 ├── charts/                  # 图表输出目录（自动创建）
-├── docs/                    # 文档
-│   ├── cli.md               # 命令行定投回测完整手册
-│   └── data_source.md       # 数据源调研与选型说明
+├── docs/
+│   ├── dca_backtest_cli.py  # 命令行定投回测完整手册
+│   ├── collect_fund_data.md # 预采集工具文档
+│   ├── data_source.md       # 数据源调研与选型说明
+│   └── database.md          # 数据库表设计文档
 │
-└── requirements.txt         # Python 依赖
+├── ruff.toml                # ruff 代码规范配置
+├── requirements.txt         # Python 运行时依赖
+└── requirements-dev.txt     # 开发依赖（ruff）
 ```
+
+### 数据流
+
+```
+collect_fund_data.py ──预采集──→ SQLite (data/fundkit.db)
+                                    │
+Streamlit 页面 ──本地 JOIN 查询──→   │
+                                    │
+                                    ├─ fund_catalog   (27,037 只)
+                                    ├─ fund_fee       (26,770 只)
+                                    ├─ fund_scale     (26,505 只)
+                                    ├─ fund_profile   (26,770 只)
+                                    ├─ fund_nav       (25,333 只)
+                                    ├─ index_series   (73,742 条)
+                                    ├─ cache_meta     (17 条)
+                                    └─ funds_meta     (3 条 TTL 标记)
+```
+
+**关键设计**：所有 Streamlit 页面（指数选基、养老金选基）通过 `db.py` 的本地 JOIN 查询读取缓存，**零 AKShare API 调用**。预采集脚本 `collect_fund_data.py` 独立管理各数据的 TTL（费率 90 天 / 净值 24 小时 / 名录 90 天）。
 
 ## 核心技术
 
@@ -76,13 +112,18 @@ fundkit/
 ## 快速开始
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 安装依赖（虚拟环境）
+./venv/bin/pip install -r requirements.txt
+
+# 预采集数据（首次使用）
+python collect_fund_data.py --catalog     # 基金名录
+python collect_fund_data.py               # 费率+规模+档案+跟踪方式
+python collect_fund_data.py --nav         # 净值
 
 # 启动图形界面
 streamlit run app.py
 
-# 或使用命令行定投回测（详见 docs/cli.md）
+# 或使用命令行定投回测（详见 docs/dca_backtest_cli.py）
 python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01
 ```
 

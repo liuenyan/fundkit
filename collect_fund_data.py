@@ -405,6 +405,23 @@ def collect_fund_nav(force=False):
     print("写入完成。")
 
 
+def collect_fund_catalog(force=False):
+    """采集全市场基金名录（fund_name_em），写入 fund_catalog 表。"""
+    db.init_db()
+    if not force and db.is_catalog_fresh():
+        print("基金名录缓存有效，跳过。使用 --force 强制重采。")
+        return
+    print("获取基金名录（fund_name_em）…")
+    try:
+        df = ak.fund_name_em()
+    except Exception as e:
+        print(f"  fund_name_em 调用失败: {e}")
+        return
+    db.save_catalog(df)
+    cnt = df["基金代码"].nunique()
+    print(f"  → 已保存 {cnt} 只基金")
+
+
 def main():
     parser = argparse.ArgumentParser(description="预采集基金费率数据")
     parser.add_argument("--force", action="store_true", help="强制全量重采")
@@ -412,6 +429,7 @@ def main():
     parser.add_argument("--workers", type=int, default=10, help="并发数（默认 10）")
     parser.add_argument("--tracking-method", action="store_true", help="仅采集指数基金跟踪方式")
     parser.add_argument("--nav", action="store_true", help="仅采集基金净值")
+    parser.add_argument("--catalog", action="store_true", help="仅采集基金名录")
     args = parser.parse_args()
 
     if args.tracking_method:
@@ -419,6 +437,9 @@ def main():
         return
     if args.nav:
         collect_fund_nav(force=args.force)
+        return
+    if args.catalog:
+        collect_fund_catalog(force=args.force)
         return
 
     codes = args.codes.split(",") if args.codes else None
