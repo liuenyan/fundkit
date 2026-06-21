@@ -59,4 +59,4 @@ tests/
 | 单文件过大 | `backend/dca_backtest.py` (604行) | 策略 A/B + 绘图 + CLI 耦合 | 加入价值平均策略后拆分 |
 | ~~无类型注解~~ | ~~92 个函数全部缺失~~ | ✅ 已全部添加，Ruff ANN 规则已启用 | 已完成 |
 | 核心函数过大 | `simulate_dca` ~200行 | 策略 A/B 逻辑交织 | 拆分策略后自然解决 |
-| 无 CI | — | 无 GitHub Actions / pre-commit | 长期 |
+| ~~无 CI~~ | ~~—~~ | ~~无 GitHub Actions~~ ✅ 已添加，`push`/`PR → main` 时自动 ruff + pytest | 已完成 |
