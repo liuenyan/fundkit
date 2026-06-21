@@ -144,6 +144,8 @@ def classify_fund_type(name):
     name_str = str(name)
     if "联接" in name_str:
         return "ETF联接"
+    if "ETF" in name_str:
+        return "ETF"
     if "增强" in name_str:
         return "指数增强"
     return "普通指数型"

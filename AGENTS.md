@@ -16,6 +16,8 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 
 - **Data source**: [AKShare](https://github.com/akfamily/akshare) → 天天基金网, **requires internet**
 - **No tests**: no test framework, no CI, no lint/typecheck config
+- **Rename rule**: 同名文件重命名必须用 `git mv`，否则 git 不识别
+- **Code style**: ruff (line-length=120, target-version=py311), managed via `requirements-dev.txt`
 - **Chart output**: `./charts/<fund_code>_dca_backtest.png` (Auto, `matplotlib.use("Agg")`)
 - **CJK fonts**: `cjk_font.py` — `setup_cjk_font()` via `mpl.font_manager.findfont`
 - **Backtest core**: `simulate_dca()` at line 184, returns `(detail_df, events_list, redeem_fee, final_val)`

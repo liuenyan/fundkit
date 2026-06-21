@@ -54,7 +54,7 @@ if index_name:
 
     fcol1, fcol2, fcol3 = st.columns(3)
     with fcol1:
-        fund_type = st.selectbox("基金类型", ["全部", "ETF联接", "指数增强", "普通指数型"])
+        fund_type = st.selectbox("基金类型", ["全部", "ETF", "ETF联接", "指数增强", "普通指数型"])
     with fcol2:
         share_class = st.selectbox("份额类别", ["全部", "A类", "C类", "E类", "Y类", "其他"])
     with fcol3:
