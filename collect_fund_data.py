@@ -37,7 +37,7 @@ def parse_purchase(s):
         return None
 
 
-def fetch_one_fee(code):
+def fetch_one_overview(code):
     """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
     try:
         df = ak.fund_overview_em(symbol=code)
@@ -108,7 +108,7 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
 
     load_cached = db.load_fund_fees(all_codes)
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
-        fut_map = {pool.submit(fetch_one_fee, code): code for code in all_codes}
+        fut_map = {pool.submit(fetch_one_overview, code): code for code in all_codes}
         done = 0
         for f in concurrent.futures.as_completed(fut_map):
             done += 1
