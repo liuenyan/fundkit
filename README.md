@@ -1,3 +1,5 @@
+[![CI](https://github.com/liuenyan/fundkit/actions/workflows/ci.yml/badge.svg)](https://github.com/liuenyan/fundkit/actions/workflows/ci.yml)
+
 # FundKit — 中国公募基金工具箱
 
 一站式中国公募基金分析工具，覆盖**定投回测**、**指数估值**、**指数选基**三大场景。数据源基于天天基金网、中证指数、乐咕乐股等公开平台（通过 [AKShare](https://github.com/akfamily/akshare) 获取），提供 Streamlit 图形界面与 CLI 双模式。
