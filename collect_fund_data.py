@@ -1,19 +1,24 @@
 """
-批量预采集基金数据（费率 + 净资产规模），写入 DB 缓存。
-TTL: 90 天
+批量预采集基金数据（费率 + 净资产规模 + 净值），写入 DB 缓存。
+TTL: 费率 90 天 / 净值 24 小时
 
 数据源:
   1. fund_purchase_em() — 批量获取 申购费 + 起购金额（1 次 API 调用）
   2. fund_overview_em() — 逐只获取 管理费/托管费/销售服务费/净资产规模（ThreadPoolExecutor 并发）
+  3. fund_open_fund_daily_em() — 全市场开放基金净值（1 次 API 调用）
+  4. fund_etf_fund_daily_em() — 场内 ETF 净值（1 次 API 调用）
 
 用法:
-  ./venv/bin/python collect_fund_data.py
-  ./venv/bin/python collect_fund_data.py --force
+  ./venv/bin/python collect_fund_data.py              # 采集费率+规模（默认）
+  ./venv/bin/python collect_fund_data.py --nav         # 采集净值
+  ./venv/bin/python collect_fund_data.py --force       # 强制全量重采费率
+  ./venv/bin/python collect_fund_data.py --nav --force # 强制重采净值
   ./venv/bin/python collect_fund_data.py --codes 000001,000002  # 指定基金
 """
 
 import argparse
 import concurrent.futures
+import re
 import sys
 import time
 
@@ -217,16 +222,147 @@ def collect_tracking_method():
     print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
 
 
+def _parse_daily_pct(v):
+    """归一化日增长率：'7.36' → 7.36, '0.05%' → 0.05, NaN → None"""
+    if pd.isna(v) or v is None or str(v).strip() in ("", "—", "---"):
+        return None
+    s = str(v).strip().replace("%", "").replace(" ", "")
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_date_from_columns(cols):
+    """
+    从动态列名中提取最新日期。
+    列名模式: 'YYYY-MM-DD-单位净值' | 'YYYY-MM-DD-累计净值'
+    返回 (date_str, unit_nav_col, cum_nav_col)
+    """
+    date_set = set()
+    for c in cols:
+        m = re.match(r"(\d{4}-\d{2}-\d{2})-(单位净值|累计净值)", str(c))
+        if m:
+            date_set.add(m.group(1))
+    if not date_set:
+        return None, None, None
+    latest = max(date_set)
+    return latest, f"{latest}-单位净值", f"{latest}-累计净值"
+
+
+def collect_fund_nav(force=False):
+    """
+    批量采集基金净值数据写入 fund_nav 表。
+    数据源:
+      1. fund_open_fund_daily_em() — 全市场开放基金，~23529 只（含场外指数基+海外）
+      2. fund_etf_fund_daily_em() — 场内 ETF，~1549 只
+    TTL: 24 小时
+    """
+    db.init_db()
+    if not force and db.is_fund_nav_fresh():
+        print("净值缓存有效（24h内），跳过。使用 --force 强制重采。")
+        return
+
+    def _to_float(v):
+        if pd.isna(v) or v is None or str(v).strip() == "":
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    rows = []
+    ts = time.time()
+
+    # ── Source 1: fund_open_fund_daily_em ──
+    print("Step 1/2 — 获取开放基金净值（fund_open_fund_daily_em）…")
+    try:
+        open_df = ak.fund_open_fund_daily_em()
+    except Exception as e:
+        print(f"  fund_open_fund_daily_em 调用失败: {e}")
+        open_df = pd.DataFrame()
+
+    if not open_df.empty:
+        date_str, nav_col, cum_col = _extract_date_from_columns(open_df.columns)
+        if date_str is None:
+            print("  ! 无法从列名解析日期，跳过")
+        else:
+            growth_col = "日增长率"
+            if growth_col not in open_df.columns:
+                print(f"  ! 缺少 {growth_col} 列，跳过")
+            else:
+                for _, r in open_df.iterrows():
+                    rows.append({
+                        "基金代码": str(r["基金代码"]),
+                        "日期": date_str,
+                        "单位净值": _to_float(r.get(nav_col)),
+                        "累计净值": _to_float(r.get(cum_col)),
+                        "日增长率": _parse_daily_pct(r.get(growth_col)),
+                        "数据来源": "open",
+                        "updated_at": ts,
+                    })
+                print(f"  → 已解析 {len(rows)} 只开放基金（{date_str}）")
+
+    # ── Source 2: fund_etf_fund_daily_em（补 ETF，覆盖新代码） ──
+    print("Step 2/2 — 获取 ETF 净值（fund_etf_fund_daily_em）…")
+    try:
+        etf_df = ak.fund_etf_fund_daily_em()
+    except Exception as e:
+        print(f"  fund_etf_fund_daily_em 调用失败: {e}")
+        etf_df = pd.DataFrame()
+
+    existing_codes = {r["基金代码"] for r in rows}
+    etf_added = 0
+    if not etf_df.empty:
+        date_str2, nav_col2, cum_col2 = _extract_date_from_columns(etf_df.columns)
+        if date_str2 is None:
+            print("  ! 无法从 ETF 列名解析日期，跳过")
+        else:
+            growth_col2 = "增长率"
+            if growth_col2 not in etf_df.columns:
+                print(f"  ! 缺少 {growth_col2} 列，跳过")
+            else:
+                for _, r in etf_df.iterrows():
+                    code = str(r["基金代码"])
+                    if code in existing_codes:
+                        continue
+                    rows.append({
+                        "基金代码": code,
+                        "日期": date_str2,
+                        "单位净值": _to_float(r.get(nav_col2)),
+                        "累计净值": _to_float(r.get(cum_col2)),
+                        "日增长率": _parse_daily_pct(r.get(growth_col2)),
+                        "数据来源": "etf",
+                        "updated_at": ts,
+                    })
+                    etf_added += 1
+                print(f"  → 新增 {etf_added} 只 ETF（{date_str2}）")
+
+    # ── 写入 DB ──
+    if not rows:
+        print("未采集到任何数据，跳过写入")
+        return
+
+    nav_df = pd.DataFrame(rows)
+    print(f"\n写入 {len(nav_df)} 条记录到 fund_nav 表…")
+    db.save_fund_nav(nav_df)
+    print("写入完成。")
+
+
 def main():
     parser = argparse.ArgumentParser(description="预采集基金费率数据")
     parser.add_argument("--force", action="store_true", help="强制全量重采")
     parser.add_argument("--codes", help="指定基金代码（逗号分隔）")
     parser.add_argument("--workers", type=int, default=10, help="并发数（默认 10）")
     parser.add_argument("--tracking-method", action="store_true", help="仅采集指数基金跟踪方式")
+    parser.add_argument("--nav", action="store_true", help="仅采集基金净值")
     args = parser.parse_args()
 
     if args.tracking_method:
         collect_tracking_method()
+        return
+    if args.nav:
+        collect_fund_nav(force=args.force)
         return
 
     codes = args.codes.split(",") if args.codes else None

@@ -137,10 +137,23 @@ fund_catalog = Table(
     Column("拼音全称", String),
 )
 
+fund_nav = Table(
+    "fund_nav",
+    metadata,
+    Column("基金代码", String, primary_key=True),
+    Column("日期", String),
+    Column("单位净值", Float),
+    Column("累计净值", Float),
+    Column("日增长率", Float),
+    Column("数据来源", String),
+    Column("updated_at", Float),
+)
+
 FUND_CACHE_TTL = 86400  # 24 小时
 CATALOG_TTL = 86400  # 基金名录默认 TTL
 FEE_TTL = 7776000  # 费率缓存 90 天
 SCALE_TTL = 86400  # 规模缓存 24 小时
+NAV_TTL = 86400  # 净值缓存 24 小时
 
 
 # ── 初始化 ──
@@ -182,6 +195,12 @@ def init_db():
             ).fetchall()]
             if "跟踪方式" not in cols:
                 conn.execute(text("ALTER TABLE fund_profile ADD COLUMN 跟踪方式 String"))
+    except Exception:
+        pass
+    # 迁移: fund_nav 建表（新表，create_all 已处理，仅添加索引确保性能）
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fund_nav_code ON fund_nav(基金代码)"))
     except Exception:
         pass
 
@@ -354,6 +373,49 @@ def clear_fund_scale():
         conn.execute(text("DELETE FROM fund_scale"))
 
 
+# ── 基金净值缓存 ──
+
+
+def load_fund_nav():
+    """返回 fund_nav 全表 DataFrame 或 None"""
+    try:
+        return pd.read_sql(text("SELECT * FROM fund_nav"), engine)
+    except Exception:
+        return None
+
+
+def save_fund_nav(df):
+    """替换写入 fund_nav 表"""
+    df.to_sql("fund_nav", engine, if_exists="replace", index=False)
+    with engine.begin() as conn:
+        conn.execute(
+            funds_meta.insert().prefix_with("OR REPLACE"),
+            {"key": "fund_nav", "value": "ok", "updated_at": time.time()},
+        )
+
+
+def is_fund_nav_fresh(ttl=None):
+    """检查 fund_nav 缓存是否仍在 TTL 内"""
+    if ttl is None:
+        ttl = NAV_TTL
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT updated_at FROM funds_meta WHERE key='fund_nav'")
+            ).fetchone()
+            if row and row[0]:
+                return time.time() - row[0] < ttl
+    except Exception:
+        pass
+    return False
+
+
+def clear_fund_nav():
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM fund_nav"))
+        conn.execute(text("DELETE FROM funds_meta WHERE key='fund_nav'"))
+
+
 # ── 基金基本信息缓存 ──
 
 
@@ -492,4 +554,5 @@ def clear_all():
         conn.execute(text("DELETE FROM funds_meta"))
         conn.execute(text("DELETE FROM fund_fee"))
         conn.execute(text("DELETE FROM fund_scale"))
+        conn.execute(text("DELETE FROM fund_nav"))
         conn.execute(text("DELETE FROM fund_profile"))

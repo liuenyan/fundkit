@@ -71,9 +71,6 @@ main()
 
 ## Progress / TODO
 
-### Pending
-1. **`fund_nav` 表**: 建新表缓存最新净值(单位净值/累计净值/日增长率) + 区间收益(近1周/1月/3月/6月/1年/成立来/今年来)，来源于 `fund_info_index_em` + `fund_etf_fund_daily_em`，定期刷新。目标是冷启动时不再依赖实时 API。
-
 ### Completed
 - `fund_fee` → `fund_scale` / `fund_profile` 分表剥离，迁移 + 回填完成
 - `collect_fees.py` → `collect_fund_data.py` 改名，扩展采集 份额规模 + 档案信息
@@ -82,6 +79,8 @@ main()
 - `fetch_one_fee` → `fetch_one_overview` 重命名
 - `fund_profile` 新增 `跟踪方式` 列，`collect_tracking_method()` 通过 `fund_info_index_em`（分开调被动/增强两组 API）写入 4295 只指数基金跟踪方式，名称启发式（`增强`/`量化`/`指增`）兜底补全剩余 2157 只，共 6452 只零遗漏
 - `index_fund.py` 从 `fund_profile` 读取 `跟踪方式` 替代 AKShare 硬编码值，兜底名称启发式
+- `fund_nav` 表建成：`基金代码/日期/单位净值/累计净值/日增长率/数据来源/updated_at`，双源采集（`fund_open_fund_daily_em` 23,529 只 + `fund_etf_fund_daily_em` 1,549 只），覆盖 6,349 / 6,490 指数基金 (97.8%)
+- `fetch_all_index_funds()` 重构为本地 SQL JOIN 优先：`fund_nav` 缓存有效时零 API 调用，JOIN `fund_catalog` + `fund_profile` + `fund_fee` + `fund_scale` 四表。支持 `collect_fund_data.py --nav` 独立刷新净值缓存
 
 ## Quirks
 

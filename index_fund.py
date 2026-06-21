@@ -50,15 +50,46 @@ COMMON_INDICES = [
 @st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
 def fetch_all_index_funds():
     db.init_db()
-    if db.is_funds_cache_fresh():
-        cached = db.load_funds()
+    if db.is_fund_nav_fresh():
+        cached = _load_index_funds_from_db()
         if cached is not None:
             return cached
+    return _fetch_index_funds_from_api()
 
+
+def _load_index_funds_from_db():
+    """从 fund_nav + fund_catalog + fund_profile 本地四表 JOIN 查询"""
+    try:
+        with db.engine.connect() as conn:
+            result = pd.read_sql(db.text("""
+                SELECT
+                    nav.基金代码,
+                    cat.基金简称 AS 基金名称,
+                    nav.单位净值,
+                    nav.日期,
+                    nav.日增长率,
+                    COALESCE(pf.跟踪方式,
+                        CASE
+                            WHEN cat.基金简称 LIKE '%增强%' OR cat.基金简称 LIKE '%量化%' OR cat.基金简称 LIKE '%指增%'
+                            THEN '增强指数型' ELSE '被动指数型'
+                        END
+                    ) AS 跟踪方式,
+                    pf.跟踪标的
+                FROM fund_nav nav
+                JOIN fund_catalog cat ON nav.基金代码 = cat.基金代码
+                LEFT JOIN fund_profile pf ON nav.基金代码 = pf.基金代码
+                WHERE cat.基金类型 LIKE '指数型-%'
+            """), conn)
+        return result
+    except Exception:
+        return None
+
+
+def _fetch_index_funds_from_api():
+    """API 降级路径：直接从 AKShare 获取"""
     domestic = ak.fund_info_index_em(symbol="全部", indicator="全部")
     domestic = domestic[[c for c in domestic.columns if c != "-"]].copy()
 
-    # 从 fund_profile 覆写 跟踪方式 / 跟踪标的（API 返回的是硬编码值）
     db.init_db()
     profile_codes = domestic["基金代码"].tolist()
     profile_map = db.load_fund_profile(profile_codes)
@@ -69,13 +100,11 @@ def fetch_all_index_funds():
                 domestic.at[i, "跟踪方式"] = info["跟踪方式"]
             if info.get("跟踪标的"):
                 domestic.at[i, "跟踪标的"] = info["跟踪标的"]
-        # 无 profile 的走名称启发式兜底
         if domestic.at[i, "跟踪方式"] in ("全部", "", None):
             name = domestic.at[i, "基金名称"]
             domestic.at[i, "跟踪方式"] = "增强指数型" if "增强" in str(name) else "被动指数型"
 
     domestic_codes = set(domestic["基金代码"])
-
     name_df = fund_catalog.get_catalog()
     overseas_idx = name_df[name_df["基金类型"].str.contains("指数型-海外", na=False)]
     overseas_codes = set(overseas_idx["基金代码"]) - domestic_codes
