@@ -15,7 +15,7 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 ## Key facts
 
 - **Data source**: [AKShare](https://github.com/akfamily/akshare) → 天天基金网, **requires internet**
-- **No tests**: no test framework, no CI, no lint/typecheck config
+- **Tests**: pytest, run via `./venv/bin/python -m pytest tests/`
 - **Rename rule**: 同名文件重命名必须用 `git mv`，否则 git 不识别
 - **Code style**: ruff (line-length=120, target-version=py311), managed via `requirements-dev.txt`
 - **Chart output**: `./charts/<fund_code>_dca_backtest.png` (Auto, `matplotlib.use("Agg")`)
