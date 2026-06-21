@@ -80,7 +80,7 @@ main()
 - `fund_data.py`: `fetch_mgmt_cust_fees` 返回扩展，`enrich_fee_scale` 新增份额规模兜底
 - 298 只基金确认无公开规模数据（含 13 Y 份额），UI 显示 "—"
 - `fetch_one_fee` → `fetch_one_overview` 重命名
-- `fund_profile` 新增 `跟踪方式` 列，`collect_tracking_method()` 通过 `fund_info_index_em`（分开调被动/增强两组 API）写入 4295 只指数基金跟踪方式
+- `fund_profile` 新增 `跟踪方式` 列，`collect_tracking_method()` 通过 `fund_info_index_em`（分开调被动/增强两组 API）写入 4295 只指数基金跟踪方式，名称启发式（`增强`/`量化`/`指增`）兜底补全剩余 2157 只，共 6452 只零遗漏
 - `index_fund.py` 从 `fund_profile` 读取 `跟踪方式` 替代 AKShare 硬编码值，兜底名称启发式
 
 ## Quirks

@@ -188,6 +188,34 @@ def collect_tracking_method():
     db.batch_update_tracking_method(method_map)
     print(f"  → 已写入 {len(method_map)} 只基金跟踪方式（被动 {len(passive)} / 增强 {len(enhanced)}）")
 
+    # ── 名称启发式兜底（覆盖场内ETF/海外/固收等 fund_info_index_em 未覆盖的） ──
+    print("\nStep 4 — 名称启发式兜底跟踪方式…")
+    with db.engine.begin() as conn:
+        # 先标记增强：名称含 增强 / 量化 / 指增
+        result = conn.execute(db.text("""
+            UPDATE fund_profile SET 跟踪方式 = '增强指数型'
+            WHERE (跟踪方式 IS NULL OR 跟踪方式 = '')
+              AND 基金代码 IN (
+                SELECT 基金代码 FROM fund_catalog
+                WHERE 基金类型 LIKE '指数型-%'
+                  AND (基金简称 LIKE '%增强%' OR 基金简称 LIKE '%量化%' OR 基金简称 LIKE '%指增%')
+              )
+        """))
+        enhanced_cnt = result.rowcount
+
+        # 剩余全部标记为被动
+        result = conn.execute(db.text("""
+            UPDATE fund_profile SET 跟踪方式 = '被动指数型'
+            WHERE (跟踪方式 IS NULL OR 跟踪方式 = '')
+              AND 基金代码 IN (
+                SELECT 基金代码 FROM fund_catalog
+                WHERE 基金类型 LIKE '指数型-%'
+              )
+        """))
+        passive_cnt = result.rowcount
+
+    print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="预采集基金费率数据")
