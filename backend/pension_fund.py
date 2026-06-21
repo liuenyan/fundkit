@@ -4,6 +4,7 @@
 """
 
 import re
+from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -14,7 +15,7 @@ from . import fund_data
 SORT_OPTIONS = fund_data.SORT_OPTIONS
 
 
-def classify_pension_category(row):
+def classify_pension_category(row: pd.Series | dict[str, Any]) -> str:
     name = str(row.get("基金名称", ""))
     fund_type = str(row.get("基金类型", ""))
 
@@ -45,7 +46,7 @@ PENSION_CATEGORIES = [
 
 
 @st.cache_data(ttl=3600, show_spinner="获取养老金基金数据…")
-def fetch_pension_funds():
+def fetch_pension_funds() -> pd.DataFrame:
     db.init_db()
     result = db.load_pension_funds()
     if result is None or result.empty:
@@ -55,13 +56,13 @@ def fetch_pension_funds():
     return result
 
 
-def filter_pension_funds(df, category):
+def filter_pension_funds(df: pd.DataFrame, category: str | None) -> pd.DataFrame:
     if not category or category == "全部":
         return df.copy()
     return df[df["养老金分类"] == category].copy()
 
 
-def sort_pension_funds(result, sort_by):
+def sort_pension_funds(result: pd.DataFrame, sort_by: str | None) -> pd.DataFrame:
     return fund_data.sort_result(result, sort_by)
 
 

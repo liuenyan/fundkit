@@ -6,6 +6,8 @@
 import io
 import contextlib
 from datetime import datetime
+from collections.abc import Callable
+from typing import Any
 
 import streamlit as st
 import numpy as np
@@ -30,7 +32,7 @@ from backend.dca_backtest import (
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 
 
-def safe_call(func, *args, **kwargs):
+def safe_call(func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         try:
@@ -40,15 +42,15 @@ def safe_call(func, *args, **kwargs):
             st.stop()
 
 
-def fetch_fund_data(*args, **kwargs):
+def fetch_fund_data(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
     return safe_call(_fetch_fund_data, *args, **kwargs)
 
 
-def simulate_dca(*args, **kwargs):
+def simulate_dca(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
     return safe_call(_simulate_dca, *args, **kwargs)
 
 
-def make_charts(nav_df, detail, fund_code, fund_name, stop_profit_on):
+def make_charts(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str, stop_profit_on: bool) -> None:
     setup_cjk_font()
 
     fig, axes = plt.subplots(2, 1, figsize=(12, 10), sharex=False)

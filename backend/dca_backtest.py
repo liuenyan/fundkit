@@ -8,6 +8,7 @@ import argparse
 import os
 import sys
 from datetime import datetime, timedelta
+from typing import Any
 
 import matplotlib
 
@@ -36,7 +37,7 @@ DEFAULT_REDEEM_SCHEDULE = [
 WEEKDAY_MAP = {1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI"}
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="中国开放式基金定投回测工具")
     p.add_argument("--fund", required=True, help="基金代码（6位）")
     p.add_argument("--amount", type=float, required=True, help="每期定投金额")
@@ -81,7 +82,7 @@ def parse_args():
     return p.parse_args()
 
 
-def fetch_fund_data(fund_code, start_date, end_date):
+def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFrame:
     """获取基金历史净值数据（单位净值 + 累计净值）"""
     print(f"获取基金 {fund_code} 历史净值数据 ...")
     try:
@@ -115,7 +116,7 @@ def fetch_fund_data(fund_code, start_date, end_date):
     return df
 
 
-def fetch_fund_name(fund_code):
+def fetch_fund_name(fund_code: str) -> str:
     """获取基金简称"""
     try:
         import db
@@ -130,7 +131,7 @@ def fetch_fund_name(fund_code):
     return fund_code
 
 
-def generate_dca_dates(nav_df, freq, start_date, end_date, day=10, weekday=1):
+def generate_dca_dates(nav_df: pd.DataFrame, freq: str, start_date: str, end_date: str, day: int = 10, weekday: int = 1) -> pd.DatetimeIndex:
     """生成定投日期序列并匹配到最近的交易日"""
     start = pd.Timestamp(start_date)
     end = pd.Timestamp(end_date)
@@ -170,7 +171,7 @@ def generate_dca_dates(nav_df, freq, start_date, end_date, day=10, weekday=1):
     return pd.DatetimeIndex(sorted(set(result)))
 
 
-def get_redeem_rate(hold_days, schedule=None):
+def get_redeem_rate(hold_days: int, schedule: list[tuple[int, float]] | None = None) -> float:
     """根据持有天数查赎回费率"""
     if schedule is None:
         schedule = DEFAULT_REDEEM_SCHEDULE
@@ -183,16 +184,16 @@ def get_redeem_rate(hold_days, schedule=None):
 
 
 def simulate_dca(
-    nav_df,
-    invest_dates,
-    amount,
-    purchase_rate,
-    redeem_schedule=None,
-    take_profit=None,
-    tp_cycle=False,
-    stop_invest=None,
-    trailing_stop=None,
-):
+    nav_df: pd.DataFrame,
+    invest_dates: pd.DatetimeIndex,
+    amount: float,
+    purchase_rate: float,
+    redeem_schedule: list[tuple[int, float]] | None = None,
+    take_profit: float | None = None,
+    tp_cycle: bool = False,
+    stop_invest: float | None = None,
+    trailing_stop: float | None = None,
+) -> tuple[pd.DataFrame, list[dict[str, Any]], float, float]:
     """执行定投模拟
 
     策略A（目标止盈）: take_profit — 收益达目标即卖出，可选 tp_cycle 循环
@@ -378,20 +379,20 @@ def simulate_dca(
     return detail, events, final_redeem_fee, final_value
 
 
-def calc_annualized(ret, start, end):
+def calc_annualized(ret: float, start: pd.Timestamp, end: pd.Timestamp) -> float:
     days = (end - start).days
     if days <= 0:
         return 0.0
     return (1 + ret) ** (365 / days) - 1
 
 
-def max_drawdown(series):
+def max_drawdown(series: pd.Series) -> float:
     peak = series.expanding().max()
     dd = (series - peak) / peak
     return dd.min()
 
 
-def calc_lumpsum(nav_df, amount, start_date, end_date, purchase_rate, redeem_schedule=None):
+def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None) -> dict[str, Any] | None:
     """一次性投入收益计算"""
     df = nav_df.copy()
     df = df[df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
@@ -424,7 +425,7 @@ def calc_lumpsum(nav_df, amount, start_date, end_date, purchase_rate, redeem_sch
     }
 
 
-def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, chart_dir):
+def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str, start_date: str, end_date: str, chart_dir: str) -> None:
     """生成分析图表"""
     os.makedirs(chart_dir, exist_ok=True)
 
@@ -480,7 +481,7 @@ def plot_results(nav_df, detail, fund_code, fund_name, start_date, end_date, cha
     print(f"图表已保存: {path}")
 
 
-def main():
+def main() -> None:
     args = parse_args()
     end_date = args.end or datetime.today().strftime("%Y-%m-%d")
 

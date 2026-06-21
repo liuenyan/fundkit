@@ -24,12 +24,14 @@ import time
 import akshare as ak
 import pandas as pd
 
+from typing import Any
+
 import db
 from backend.fund_data import batch_fetch_overview, fetch_purchase_data, save_overview_result
 
 
 
-def collect_fund_data(max_workers=10, force=False, codes=None):
+def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[str] | None = None) -> None:
     db.init_db()
 
     # ── TTL 检查 ──
@@ -63,7 +65,7 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
 
     load_cached = db.fund_fees.load(all_codes)
 
-    def _persist(code, result):
+    def _persist(code: str, result: dict | None) -> None:
         nonlocal success, failed
         if result is None:
             failed += 1
@@ -95,7 +97,7 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
         print("  费率缓存 TTL 已更新")
 
 
-def collect_tracking_method():
+def collect_tracking_method() -> None:
     """
     从 fund_info_index_em 获取指数基金的跟踪方式（被动指数型 / 增强指数型），
     写入 fund_profile.跟踪方式。
@@ -155,7 +157,7 @@ def collect_tracking_method():
     print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
 
 
-def _parse_daily_pct(v):
+def _parse_daily_pct(v: Any) -> float | None:  # noqa: ANN401
     """归一化日增长率：'7.36' → 7.36, '0.05%' → 0.05, NaN → None"""
     if pd.isna(v) or v is None or str(v).strip() in ("", "—", "---"):
         return None
@@ -166,7 +168,7 @@ def _parse_daily_pct(v):
         return None
 
 
-def _extract_date_from_columns(cols):
+def _extract_date_from_columns(cols: pd.Index) -> tuple[str | None, str | None, str | None]:
     """
     从动态列名中提取最新日期。
     列名模式: 'YYYY-MM-DD-单位净值' | 'YYYY-MM-DD-累计净值'
@@ -183,7 +185,7 @@ def _extract_date_from_columns(cols):
     return latest, f"{latest}-单位净值", f"{latest}-累计净值"
 
 
-def collect_fund_nav(force=False):
+def collect_fund_nav(force: bool = False) -> None:
     """
     批量采集基金净值数据写入 fund_nav 表。
     数据源:
@@ -196,7 +198,7 @@ def collect_fund_nav(force=False):
         print("净值缓存有效（24h内），跳过。使用 --force 强制重采。")
         return
 
-    def _to_float(v):
+    def _to_float(v: Any) -> float | None:  # noqa: ANN401
         if pd.isna(v) or v is None or str(v).strip() == "":
             return None
         try:
@@ -315,7 +317,7 @@ def collect_fund_nav(force=False):
     print("写入完成。")
 
 
-def collect_fund_catalog(force=False):
+def collect_fund_catalog(force: bool = False) -> None:
     """采集全市场基金名录（fund_name_em），写入 fund_catalog 表。"""
     db.init_db()
     if not force and db.fund_catalog.is_fresh():
@@ -332,7 +334,7 @@ def collect_fund_catalog(force=False):
     print(f"  → 已保存 {cnt} 只基金")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="预采集基金费率数据")
     parser.add_argument("--force", action="store_true", help="强制全量重采")
     parser.add_argument("--codes", help="指定基金代码（逗号分隔）")

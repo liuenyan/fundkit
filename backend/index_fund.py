@@ -74,7 +74,7 @@ COMMON_INDICES = [
 
 
 @st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
-def fetch_all_index_funds():
+def fetch_all_index_funds() -> pd.DataFrame:
     db.init_db()
     result = db.load_index_fund_nav()
     if result is not None and not result.empty:
@@ -83,7 +83,7 @@ def fetch_all_index_funds():
     return pd.DataFrame()
 
 
-def _tokenize(query):
+def _tokenize(query: str) -> list[str]:
     """将查询拆成有意义的 token：连续中文每 2 字一组 + 非中文连续串。"""
     tokens = []
     i = 0
@@ -108,7 +108,7 @@ def _tokenize(query):
 SORT_OPTIONS = fund_data.SORT_OPTIONS
 
 
-def _normalize_index_name(name):
+def _normalize_index_name(name: str) -> str:
     """归一化跟踪标的：去掉常见后缀用于精确匹配"""
     if not name or not isinstance(name, str):
         return name
@@ -127,7 +127,7 @@ def _normalize_index_name(name):
     return name
 
 
-def classify_share_class(name):
+def classify_share_class(name: str) -> str:
     name_upper = str(name).upper().rstrip("①②③④⑤⑥⑦⑧⑨⑩")
     if name_upper.endswith("Y") or "Y类" in name_upper:
         return "Y类"
@@ -140,7 +140,7 @@ def classify_share_class(name):
     return "其他"
 
 
-def classify_fund_type(name):
+def classify_fund_type(name: str) -> str:
     name_str = str(name)
     if "联接" in name_str:
         return "ETF联接"
@@ -151,7 +151,7 @@ def classify_fund_type(name):
     return "普通指数型"
 
 
-def filter_funds(df, fund_type=None, share_class=None):
+def filter_funds(df: pd.DataFrame, fund_type: str | None = None, share_class: str | None = None) -> pd.DataFrame:
     result = df.copy()
     if fund_type:
         result = result[result["基金名称"].apply(classify_fund_type) == fund_type]
@@ -160,11 +160,11 @@ def filter_funds(df, fund_type=None, share_class=None):
     return result.reset_index(drop=True)
 
 
-def sort_result(result, sort_by):
+def sort_result(result: pd.DataFrame, sort_by: str | None) -> pd.DataFrame:
     return fund_data.sort_result(result, sort_by)
 
 
-def search_funds_by_index(df, index_name, sort_by=None):
+def search_funds_by_index(df: pd.DataFrame, index_name: str, sort_by: str | None = None) -> pd.DataFrame:
     if not index_name:
         return pd.DataFrame()
 

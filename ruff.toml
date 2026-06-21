@@ -5,5 +5,5 @@ target-version = "py311"
 quote-style = "double"
 
 [lint]
-select = ["E", "F", "W"]
-ignore = ["E501"]
+select = ["E", "F", "W", "ANN"]
+ignore = ["E501", "ANN002", "ANN003", "ANN204", "ANN401"]

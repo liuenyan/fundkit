@@ -6,6 +6,7 @@ SQLite 数据库管理（SQLAlchemy Core）
 import os
 import time
 from datetime import date, datetime
+from typing import Any
 
 import pandas as pd
 from sqlalchemy import (
@@ -28,7 +29,7 @@ engine = create_engine(DB_URL, echo=False)
 
 
 @event.listens_for(engine, "connect")
-def _set_wal(dbapi_connection, _connection_record):
+def _set_wal(dbapi_connection: Any, _connection_record: Any) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.close()
@@ -141,7 +142,7 @@ class _FundTable:
     meta_key: str | None = None
     default_ttl: float = 86400
 
-    def _get_update_time(self):
+    def _get_update_time(self) -> float | None:
         if not self.meta_key:
             return None
         with engine.connect() as conn:
@@ -151,7 +152,7 @@ class _FundTable:
             ).fetchone()
             return row[0] if row else None
 
-    def is_fresh(self, ttl=None):
+    def is_fresh(self, ttl: float | None = None) -> bool:
         if not self.meta_key:
             return False
         ttl = ttl or self.default_ttl
@@ -163,7 +164,7 @@ class _FundTable:
             pass
         return False
 
-    def set_fresh(self):
+    def set_fresh(self) -> None:
         if not self.meta_key:
             return
         with engine.begin() as conn:
@@ -172,7 +173,7 @@ class _FundTable:
                 {"key": self.meta_key, "value": "ok", "updated_at": time.time()},
             )
 
-    def clear(self):
+    def clear(self) -> None:
         with engine.begin() as conn:
             conn.execute(text(f"DELETE FROM {self.table.name}"))
             if self.meta_key:
@@ -182,7 +183,7 @@ class _FundTable:
 class _DictTable(_FundTable):
     """加载为 {code: dict} 的表 (fund_fee / fund_scale / fund_profile)"""
 
-    def _load_rows(self, codes):
+    def _load_rows(self, codes: list[str]) -> dict[str, Any]:
         if not codes:
             return {}
         with engine.connect() as conn:
@@ -195,7 +196,7 @@ class FundFeeTable(_DictTable):
     meta_key = "fund_fee"
     default_ttl = FEE_TTL
 
-    def load(self, codes):
+    def load(self, codes: list[str]) -> dict[str, dict[str, Any]]:
         rows = self._load_rows(codes)
         return {
             code: {
@@ -205,7 +206,8 @@ class FundFeeTable(_DictTable):
             for code, r in rows.items()
         }
 
-    def save(self, code, purchase, mgmt, cust, sales_service, min_purchase, total):
+    def save(self, code: str, purchase: float | None, mgmt: float | None, cust: float | None,
+             sales_service: float | None, min_purchase: str | None, total: float | None) -> None:
         with engine.begin() as conn:
             conn.execute(
                 fund_fee.insert().prefix_with("OR REPLACE"),
@@ -215,7 +217,7 @@ class FundFeeTable(_DictTable):
                  "updated_at": time.time()},
             )
 
-    def cached_count(self):
+    def cached_count(self) -> int:
         try:
             with engine.connect() as conn:
                 row = conn.execute(text("SELECT COUNT(*) FROM fund_fee")).fetchone()
@@ -228,14 +230,14 @@ class FundScaleTable(_DictTable):
     table = fund_scale
     meta_key = None
 
-    def load(self, codes):
+    def load(self, codes: list[str]) -> dict[str, dict[str, Any]]:
         rows = self._load_rows(codes)
         return {
             code: {"净资产规模": r[1], "份额规模": r[2]}
             for code, r in rows.items()
         }
 
-    def save(self, code, scale, shares=None):
+    def save(self, code: str, scale: float | None, shares: float | None = None) -> None:
         with engine.begin() as conn:
             conn.execute(
                 fund_scale.insert().prefix_with("OR REPLACE"),
@@ -248,7 +250,7 @@ class FundProfileTable(_DictTable):
     table = fund_profile
     meta_key = None
 
-    def load(self, codes):
+    def load(self, codes: list[str]) -> dict[str, dict[str, Any]]:
         rows = self._load_rows(codes)
         return {
             code: {
@@ -259,8 +261,10 @@ class FundProfileTable(_DictTable):
             for code, r in rows.items()
         }
 
-    def save(self, code, issue_date, establish_date, mgr, custodian,
-             fund_mgr, benchmark, track_index, track_method=None):
+    def save(self, code: str, issue_date: str | None, establish_date: str | None,
+             mgr: str | None, custodian: str | None, fund_mgr: str | None,
+             benchmark: str | None, track_index: str | None,
+             track_method: str | None = None) -> None:
         with engine.begin() as conn:
             conn.execute(
                 fund_profile.insert().prefix_with("OR REPLACE"),
@@ -271,7 +275,7 @@ class FundProfileTable(_DictTable):
                  "跟踪方式": track_method, "updated_at": time.time()},
             )
 
-    def batch_update_tracking_method(self, method_map):
+    def batch_update_tracking_method(self, method_map: dict[str, str]) -> None:
         with engine.begin() as conn:
             for code, method in method_map.items():
                 conn.execute(
@@ -283,13 +287,13 @@ class FundProfileTable(_DictTable):
 class _BulkTable(_FundTable):
     """全表替换的表 (fund_nav / fund_catalog)"""
 
-    def load(self):
+    def load(self) -> pd.DataFrame | None:
         try:
             return pd.read_sql(text(f"SELECT * FROM {self.table.name}"), engine)
         except Exception:
             return None
 
-    def save(self, df):
+    def save(self, df: pd.DataFrame) -> None:
         df.to_sql(self.table.name, engine, if_exists="replace", index=False)
         self.set_fresh()
 
@@ -317,7 +321,7 @@ fund_catalog = FundCatalogTable()
 # ── 初始化 ──
 
 
-def init_db():
+def init_db() -> None:
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
 
@@ -325,7 +329,7 @@ def init_db():
 # ── 估值序列缓存 ──
 
 
-def load_series(name, metric):
+def load_series(name: str, metric: str) -> pd.DataFrame:
     return pd.read_sql_query(
         "SELECT date, value FROM index_series WHERE name=? AND metric=? ORDER BY date",
         engine,
@@ -333,7 +337,7 @@ def load_series(name, metric):
     )
 
 
-def upsert_series(name, metric, df):
+def upsert_series(name: str, metric: str, df: pd.DataFrame) -> None:
     with engine.begin() as conn:
         for _, row in df.iterrows():
             conn.execute(
@@ -342,7 +346,7 @@ def upsert_series(name, metric, df):
             )
 
 
-def get_series_last_date(name, metric):
+def get_series_last_date(name: str, metric: str) -> str | None:
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT MAX(date) FROM index_series WHERE name=:name AND metric=:metric"),
@@ -351,7 +355,7 @@ def get_series_last_date(name, metric):
         return row[0] if row and row[0] else None
 
 
-def get_cache_meta(name, metric):
+def get_cache_meta(name: str, metric: str) -> Any:
     with engine.connect() as conn:
         return conn.execute(
             text("SELECT * FROM cache_meta WHERE name=:name AND metric=:metric"),
@@ -359,7 +363,7 @@ def get_cache_meta(name, metric):
         ).fetchone()
 
 
-def set_cache_meta(name, metric, source):
+def set_cache_meta(name: str, metric: str, source: str) -> None:
     today = date.today().isoformat()
     with engine.begin() as conn:
         conn.execute(
@@ -368,7 +372,7 @@ def set_cache_meta(name, metric, source):
         )
 
 
-def is_series_fresh(name, metric, max_age_days=2):
+def is_series_fresh(name: str, metric: str, max_age_days: int = 2) -> bool:
     last = get_series_last_date(name, metric)
     if last is not None:
         last_date = datetime.strptime(last, "%Y-%m-%d").date()
@@ -385,7 +389,7 @@ def is_series_fresh(name, metric, max_age_days=2):
 # ── 复杂 JOIN 查询 ──
 
 
-def load_index_fund_nav():
+def load_index_fund_nav() -> pd.DataFrame | None:
     """JOIN fund_nav + fund_catalog + fund_profile + fund_fee + fund_scale
     返回指数基金净值+费率+规模+跟踪方式——单次查询，无需后续 enrich_fee_scale。"""
     try:
@@ -425,7 +429,7 @@ def load_index_fund_nav():
         return None
 
 
-def load_pension_funds():
+def load_pension_funds() -> pd.DataFrame | None:
     """JOIN fund_catalog + fund_nav + fund_fee + fund_scale
     返回 Y 份额基金净值+费率+规模——单次查询，无需后续 enrich_fee_scale。"""
     try:
@@ -462,7 +466,7 @@ def load_pension_funds():
 # ── 全局操作 ──
 
 
-def clear_all():
+def clear_all() -> None:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM index_series"))
         conn.execute(text("DELETE FROM cache_meta"))

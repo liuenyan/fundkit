@@ -2,10 +2,12 @@
 格式化函数 — Streamlit 页面共用的数据渲染工具
 """
 
+from typing import Any
+
 import pandas as pd
 
 
-def fmt_pct(v):
+def fmt_pct(v: Any) -> str:
     if pd.isna(v) or v == "":
         return "—"
     try:
@@ -15,7 +17,7 @@ def fmt_pct(v):
         return str(v)
 
 
-def fmt_nav(v):
+def fmt_nav(v: Any) -> str:
     if pd.isna(v) or v == "":
         return "—"
     try:
@@ -24,7 +26,7 @@ def fmt_nav(v):
         return str(v)
 
 
-def fmt_scale(v):
+def fmt_scale(v: Any) -> str:
     if pd.isna(v) or v == "" or v is None:
         return "—"
     try:
@@ -36,7 +38,7 @@ def fmt_scale(v):
         return str(v)
 
 
-def fmt_total_fee(row):
+def fmt_total_fee(row: Any) -> str:
     buy = row.get("申购费")
     mgmt = row.get("管理费")
     cust = row.get("托管费")

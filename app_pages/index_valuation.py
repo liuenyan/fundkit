@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
 
+from matplotlib.figure import Figure
 from tools.cjk_font import setup_cjk_font
 from backend.index_valuation import fetch_all as _fetch_valuation
 from backend.index_valuation import fetch_series_all as _fetch_series
@@ -70,7 +71,7 @@ for r in data:
 WINDOWS_CAL_DAYS = {5: 1825, 10: 3650}
 
 
-def _make_percentile_chart(df, label_name):
+def _make_percentile_chart(df: pd.DataFrame, label_name: str) -> Figure:
     setup_cjk_font()
 
     fig, ax = plt.subplots(figsize=(10, 4.5))
@@ -111,7 +112,7 @@ def _make_percentile_chart(df, label_name):
     return fig
 
 
-def _make_price_pe_chart(price_df, pe_df, name):
+def _make_price_pe_chart(price_df: pd.DataFrame, pe_df: pd.DataFrame, name: str) -> Figure:
     setup_cjk_font()
 
     # 只显示 PE 数据覆盖的时间段，剔除指数发布前的虚拟数据
@@ -169,7 +170,7 @@ with st.expander("📊 历史百分位曲线", expanded=True):
                     st.pyplot(_make_price_pe_chart(price_df, pe_chart_df, name))
 
 
-def _make_yield_compare_chart(bond_df, div_df):
+def _make_yield_compare_chart(bond_df: pd.DataFrame, div_df: pd.DataFrame) -> Figure:
     setup_cjk_font()
     plt.rcParams["axes.unicode_minus"] = False
 

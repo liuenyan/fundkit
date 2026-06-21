@@ -4,7 +4,9 @@
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -32,7 +34,7 @@ _FETCH_API = {
 }
 
 
-def _fetch(source, metric, param):
+def _fetch(source: str, metric: str, param: str) -> pd.DataFrame | None:
     entry = _FETCH_API.get((source, metric))
     if entry is None:
         logger.warning("未知数据源/指标组合: %s/%s", source, metric)
@@ -79,14 +81,14 @@ CONFIG = [
 VALUATION_BANDS = [(0, 30, "低估"), (30, 70, "适中"), (70, 100, "高估")]
 
 
-def calc_percentile(series):
+def calc_percentile(series: pd.Series) -> float | None:
     s = series.dropna()
     if len(s) < 2:
         return None
     return float((s < s.iloc[-1]).mean() * 100)
 
 
-def get_label(pct):
+def get_label(pct: float | None) -> str:
     if pct is None:
         return "数据不足"
     for lo, hi, label in VALUATION_BANDS:
@@ -95,7 +97,7 @@ def get_label(pct):
     return "高估"
 
 
-def rolling_percentile(df, window_days, min_periods=60):
+def rolling_percentile(df: pd.DataFrame, window_days: int, min_periods: int = 60) -> pd.Series:
     df = df.sort_values("date").set_index("date")
     result = (
         df["value"]
@@ -108,7 +110,7 @@ def rolling_percentile(df, window_days, min_periods=60):
 # ── 缓存感知的数据获取 ──
 
 
-def get_or_update_series(name, metric, source, fetch_fn):
+def get_or_update_series(name: str, metric: str, source: str, fetch_fn: Callable[[], pd.DataFrame | None]) -> tuple[pd.DataFrame | None, bool]:
     """
     返回 (DataFrame, 是否命中缓存)。
 
@@ -137,11 +139,11 @@ def get_or_update_series(name, metric, source, fetch_fn):
     return df, False
 
 
-def clear_cache():
+def clear_cache() -> None:
     db.clear_all()
 
 
-def _get_series(cfg, metric="pe"):
+def _get_series(cfg: dict[str, Any], metric: str = "pe") -> tuple[pd.DataFrame | None, bool]:
     name = cfg["name"]
     if metric == "pb":
         source = cfg.get("pb_source", cfg["source"])
@@ -155,8 +157,8 @@ def _get_series(cfg, metric="pe"):
 # ── 公开接口 ──
 
 
-def fetch_all():
-    results = []
+def fetch_all() -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
     for cfg in CONFIG:
         name = cfg["name"]
         try:
@@ -184,8 +186,8 @@ def fetch_all():
     return results
 
 
-def fetch_series_all():
-    results = []
+def fetch_series_all() -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
     for cfg in CONFIG:
         name = cfg["name"]
         try:
@@ -203,7 +205,7 @@ def fetch_series_all():
     return results
 
 
-def _fetch_bond_yield_10y(_=None):
+def _fetch_bond_yield_10y(_: object = None) -> pd.DataFrame | None:
     df = ak.bond_zh_us_rate()
     col = "中国国债收益率10年"
     if df is None or df.empty or col not in df.columns:
@@ -214,7 +216,7 @@ def _fetch_bond_yield_10y(_=None):
     return out
 
 
-def _fetch_dividend_yield(_=None):
+def _fetch_dividend_yield(_: object = None) -> pd.DataFrame | None:
     indicator = ak.stock_zh_index_value_csindex(symbol="000922")
     if indicator is None or indicator.empty:
         logger.warning("获取中证红利指标数据失败，无法校准股息率")
@@ -256,11 +258,11 @@ def _fetch_dividend_yield(_=None):
     return out
 
 
-def fetch_bond_yield_10y():
+def fetch_bond_yield_10y() -> pd.DataFrame | None:
     df, _ = get_or_update_series("中债", "10y", "bond", _fetch_bond_yield_10y)
     return df if not df.empty else None
 
 
-def fetch_dividend_yield():
+def fetch_dividend_yield() -> pd.DataFrame | None:
     df, _ = get_or_update_series("中证红利", "dividend_yield", "csindex_indicator", _fetch_dividend_yield)
     return df if not df.empty else None

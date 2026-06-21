@@ -6,7 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-def setup_cjk_font():
+def setup_cjk_font() -> None:
     s = ""
     for _label, _names in (
         (
