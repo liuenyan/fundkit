@@ -25,7 +25,7 @@ import akshare as ak
 import pandas as pd
 
 import db
-from backend.fund_data import parse_purchase, batch_fetch_overview
+from backend.fund_data import batch_fetch_overview, fetch_purchase_data
 
 
 
@@ -38,31 +38,22 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
         print(f"费率缓存有效，已缓存 {cnt} 只基金，跳过。使用 --force 强制重采。")
         return
 
-    # ── 获取所有基金代码 ──
+    # ── 获取所有基金代码 + 申购费 ──
     print("正在获取基金申购费数据（fund_purchase_em）…")
-    try:
-        purchase_df = ak.fund_purchase_em()
-    except Exception as e:
-        print(f"获取 fund_purchase_em 失败: {e}")
+    purchase_data = fetch_purchase_data(codes)
+    if not purchase_data:
+        print("获取 fund_purchase_em 失败")
         sys.exit(1)
 
-    if codes:
-        purchase_df = purchase_df[purchase_df["基金代码"].isin(codes)]
-
-    all_codes = purchase_df["基金代码"].tolist()
+    all_codes = list(purchase_data.keys())
     total = len(all_codes)
     print(f"共 {total} 只基金\n")
 
     # ── Step 1: 保存申购费 + 起购金额 ──
     print("Step 1/2 — 保存申购费 + 起购金额…")
-    saved = 0
-    for _, row in purchase_df.iterrows():
-        code = row["基金代码"]
-        purchase = parse_purchase(row.get("手续费"))
-        min_purchase = str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None
+    for code, (purchase, min_purchase) in purchase_data.items():
         db.save_fund_fee(code, purchase, None, None, None, min_purchase, None)
-        saved += 1
-    print(f"  → 已保存 {saved} 只基金申购费数据\n")
+    print(f"  → 已保存 {len(purchase_data)} 只基金申购费数据\n")
 
     # ── Step 2: 并发获取管理费/托管费/销售服务费 ──
     print(f"Step 2/2 — 并发获取管理费/托管费/销售服务费 ({max_workers} workers)…")

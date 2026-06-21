@@ -93,7 +93,7 @@ def batch_fetch_overview(codes, on_result, max_workers=10):
             yield done, total
 
 
-def parse_purchase(s):
+def _parse_purchase(s):
     """解析 fund_purchase_em 的 手续费，用于批量获取申购费"""
     if pd.isna(s) or s is None:
         return None
@@ -104,6 +104,26 @@ def parse_purchase(s):
         return float(s)
     except (ValueError, TypeError):
         return None
+
+
+def fetch_purchase_data(codes=None):
+    """获取申购费+起购金额。返回 {code: (purchase, min_purchase)}。
+    codes=None 表示全部；空列表返回 {}。
+    """
+    try:
+        df = ak.fund_purchase_em()
+    except Exception:
+        return {}
+    if codes:
+        df = df[df["基金代码"].isin(codes)]
+    result = {}
+    for _, row in df.iterrows():
+        code = row["基金代码"]
+        result[code] = (
+            _parse_purchase(row.get("手续费")),
+            str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None,
+        )
+    return result
 
 
 def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
@@ -151,15 +171,10 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
         )
 
     # ── 未缓存: 先用 fund_purchase_em 批量补申购费+起购金额 ──
-    try:
-        purchase_df = ak.fund_purchase_em()
-        purchase_idx = purchase_df[purchase_df["基金代码"].isin(uncached)]
-        for _, row in purchase_idx.iterrows():
-            code = row["基金代码"]
-            purchase_map[code] = parse_purchase(row.get("手续费"))
-            min_purchase_map[code] = str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None
-    except Exception:
-        pass
+    purchase_data = fetch_purchase_data(uncached)
+    for code, (p, mp) in purchase_data.items():
+        purchase_map[code] = p
+        min_purchase_map[code] = mp
 
     # ── 并发获取管理费/托管费/销售服务费 ──
     total = len(uncached)
