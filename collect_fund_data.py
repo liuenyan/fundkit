@@ -25,7 +25,7 @@ import akshare as ak
 import pandas as pd
 
 import db
-from backend.fund_data import batch_fetch_overview, fetch_purchase_data
+from backend.fund_data import batch_fetch_overview, fetch_purchase_data, save_overview_result
 
 
 
@@ -68,23 +68,8 @@ def collect_fund_data(max_workers=10, force=False, codes=None):
         if result is None:
             failed += 1
             return
-        (
-            mgmt, cust, sales_service, scale, scale_shares,
-            issue_date, establish_date, mgr, custodian, fund_mgr,
-            benchmark, track_index,
-        ) = result
         cached = load_cached.get(code, {})
-        purchase = cached.get("申购费")
-        min_purchase = cached.get("起购金额")
-        sales = sales_service if sales_service is not None else 0
-        total_fee = (
-            round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
-            if mgmt is not None and cust is not None
-            else None
-        )
-        db.fund_fees.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
-        db.fund_scale.save(code, scale, scale_shares)
-        db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+        save_overview_result(code, result, cached.get("申购费"), cached.get("起购金额"))
         success += 1
 
     for done, total in batch_fetch_overview(all_codes, _persist, max_workers):

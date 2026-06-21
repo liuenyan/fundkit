@@ -126,6 +126,26 @@ def fetch_purchase_data(codes=None):
     return result
 
 
+def save_overview_result(code, result, purchase, min_purchase):
+    """将 fund_overview_em 的 12 字段结果写入 DB 三表（fee + scale + profile）"""
+    if result is None:
+        return
+    (
+        mgmt, cust, sales_service, scale, scale_shares,
+        issue_date, establish_date, mgr, custodian, fund_mgr,
+        benchmark, track_index,
+    ) = result
+    sales = sales_service if sales_service is not None else 0
+    total_fee = (
+        round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
+        if mgmt is not None and cust is not None
+        else None
+    )
+    db.fund_fees.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
+    db.fund_scale.save(code, scale, scale_shares)
+    db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+
+
 def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
     """批量获取管理费/托管费/销售服务费/规模/档案。
     优先级: DB 缓存(预采集) → 天天基金(fund_overview_em, 并发) → 雪球兜底
@@ -186,26 +206,14 @@ def fetch_mgmt_cust_fees(codes, progress_placeholder=None):
             return
         (
             mgmt, cust, sales_service, scale, scale_shares,
-            issue_date, establish_date, mgr, custodian, fund_mgr,
-            benchmark, track_index,
+            *_,
         ) = result
         mgmt_map[code] = mgmt
         cust_map[code] = cust
         sales_service_map[code] = sales_service
         scale_map[code] = scale
         scale_shares_map[code] = scale_shares
-
-        purchase = purchase_map.get(code)
-        min_purchase = min_purchase_map.get(code)
-        sales = sales_service if sales_service is not None else 0
-        total_fee = (
-            round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
-            if mgmt is not None and cust is not None
-            else None
-        )
-        db.fund_fees.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
-        db.fund_scale.save(code, scale, scale_shares)
-        db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
+        save_overview_result(code, result, purchase_map.get(code), min_purchase_map.get(code))
 
     for done, total in batch_fetch_overview(uncached, _persist, max_workers=10):
         if progress_placeholder:
