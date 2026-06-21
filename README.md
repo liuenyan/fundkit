@@ -69,7 +69,7 @@ fundkit/
 ├── data/                    # SQLite 数据库目录（自动创建）
 ├── charts/                  # 图表输出目录（自动创建）
 ├── docs/
-│   ├── dca_backtest_cli.py  # 命令行定投回测完整手册
+│   ├── dca_backtest_cli.md  # 命令行定投回测完整手册
 │   ├── collect_fund_data.md # 预采集工具文档
 │   ├── data_source.md       # 数据源调研与选型说明
 │   └── database.md          # 数据库表设计文档
@@ -123,7 +123,7 @@ python collect_fund_data.py --nav         # 净值
 # 启动图形界面
 streamlit run app.py
 
-# 或使用命令行定投回测（详见 docs/dca_backtest_cli.py）
+# 或使用命令行定投回测（详见 docs/dca_backtest_cli.md）
 python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01
 ```
 
