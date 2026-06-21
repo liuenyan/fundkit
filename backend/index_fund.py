@@ -158,10 +158,6 @@ def filter_funds(df, fund_type=None, share_class=None):
     return result.reset_index(drop=True)
 
 
-def enrich_fee_scale(result):
-    return fund_data.enrich_fee_scale(result)
-
-
 def sort_result(result, sort_by):
     return fund_data.sort_result(result, sort_by)
 
@@ -178,7 +174,6 @@ def search_funds_by_index(df, index_name, sort_by=None):
         )
         result = df[track_mask].copy()
         if not result.empty:
-            result = enrich_fee_scale(result)
             result = sort_result(result, sort_by)
             return result
 
@@ -195,6 +190,5 @@ def search_funds_by_index(df, index_name, sort_by=None):
             mask &= df["基金名称"].str.contains(re.escape(t), case=False, na=False, regex=True)
         result = df[mask].copy()
 
-    result = enrich_fee_scale(result)
     result = sort_result(result, sort_by)
     return result

@@ -363,7 +363,8 @@ def clear_fund_nav():
 
 
 def load_index_fund_nav():
-    """JOIN fund_nav + fund_catalog + fund_profile 返回指数基金净值+跟踪方式。"""
+    """JOIN fund_nav + fund_catalog + fund_profile + fund_fee + fund_scale
+    返回指数基金净值+费率+规模+跟踪方式——单次查询，无需后续 enrich_fee_scale。"""
     try:
         with engine.connect() as conn:
             return pd.read_sql(
@@ -380,10 +381,19 @@ def load_index_fund_nav():
                             THEN '增强指数型' ELSE '被动指数型'
                         END
                     ) AS 跟踪方式,
-                    pf.跟踪标的
+                    pf.跟踪标的,
+                    fee.申购费,
+                    fee.管理费,
+                    fee.托管费,
+                    fee.销售服务费,
+                    fee.综合费率,
+                    fee.起购金额,
+                    scale.净资产规模 AS 基金规模
                 FROM fund_nav nav
                 JOIN fund_catalog cat ON nav.基金代码 = cat.基金代码
                 LEFT JOIN fund_profile pf ON nav.基金代码 = pf.基金代码
+                LEFT JOIN fund_fee fee ON nav.基金代码 = fee.基金代码
+                LEFT JOIN fund_scale scale ON nav.基金代码 = scale.基金代码
                 WHERE cat.基金类型 LIKE '指数型-%'
             """),
                 conn,
