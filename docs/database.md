@@ -14,7 +14,6 @@
 | `index_series` | 73,742 | 指数估值时序（PE/PB/点位） | ✅ 活跃 |
 | `cache_meta` | 17 | 估值数据源元信息 | ✅ 活跃 |
 | `funds_meta` | 3 | 缓存 TTL 标记 | ✅ 活跃 |
-| `funds` | 4,578 | 旧缓存（已废弃，待清理） | ❌ 废弃 |
 
 ---
 
@@ -170,14 +169,4 @@
 
 **记录数**: 3（fund_catalog, fund_fee, fund_nav）
 
----
 
-## 废弃表
-
-### `funds`
-
-旧版基金缓存表，已被 `fund_nav` + `fund_fee` + `fund_profile` + `fund_scale` 四表取代。代码依赖已全部移除，仅数据库中存在，可安全删除。
-
-### `fund_fees`（已删）
-
-旧版费率缓存表，仅含管理费/托管费 2 列，已被 `fund_fee` 表取代。已从数据库中 DROP。
