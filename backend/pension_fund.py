@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 import db
-import fund_data
+from . import fund_data
 
 SORT_OPTIONS = fund_data.SORT_OPTIONS
 

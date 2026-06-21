@@ -6,7 +6,7 @@
 import pandas as pd
 import streamlit as st
 
-from pension_fund import (
+from backend.pension_fund import (
     PENSION_CATEGORIES,
     SORT_OPTIONS,
     fetch_pension_funds,

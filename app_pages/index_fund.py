@@ -6,7 +6,7 @@
 import pandas as pd
 import streamlit as st
 
-from index_fund import (
+from backend.index_fund import (
     COMMON_INDICES,
     SORT_OPTIONS,
     fetch_all_index_funds,

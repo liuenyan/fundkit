@@ -26,7 +26,7 @@ import akshare as ak
 import pandas as pd
 
 import db
-from fund_data import parse_fee_pct, _parse_scale
+from backend.fund_data import parse_fee_pct, _parse_scale
 
 
 def parse_purchase(s):

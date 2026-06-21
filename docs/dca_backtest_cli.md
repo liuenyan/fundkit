@@ -1,11 +1,11 @@
 # 定投回测命令行工具
 
-`dca_backtest.py` 是 FundKit 的命令行组件，用于对中国开放式基金进行定投（DCA）回测分析。
+`backend.dca_backtest` 是 FundKit 的命令行模块，用于对中国开放式基金进行定投（DCA）回测分析。
 
 ## 使用方法
 
 ```bash
-python dca_backtest.py --fund <基金代码> --amount <每期金额> [选项]
+python -m backend.dca_backtest --fund <基金代码> --amount <每期金额> [选项]
 ```
 
 ### 参数说明
@@ -32,26 +32,26 @@ python dca_backtest.py --fund <基金代码> --amount <每期金额> [选项]
 **月度定投**：每月 10 日定投兴全商业模式 1000 元，2018 年至今：
 
 ```bash
-python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01
+python -m backend.dca_backtest --fund 163415 --amount 1000 --start 2018-01-01
 ```
 
 **周定投**：每周一定投 500 元：
 
 ```bash
-python dca_backtest.py --fund 161725 --amount 500 --freq weekly --start 2020-01-01
+python -m backend.dca_backtest --fund 161725 --amount 500 --freq weekly --start 2020-01-01
 ```
 
 **策略A：目标止盈**，收益达 20% 即卖出，循环：
 
 ```bash
-python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01 \
+python -m backend.dca_backtest --fund 163415 --amount 1000 --start 2018-01-01 \
   --take-profit 0.20 --tp-cycle
 ```
 
 **策略B：停投持有+移动止盈**，收益达 20% 停投，回撤 8% 卖出，循环：
 
 ```bash
-python dca_backtest.py --fund 163415 --amount 1000 --start 2018-01-01 \
+python -m backend.dca_backtest --fund 163415 --amount 1000 --start 2018-01-01 \
   --stop-invest 0.20 --trailing-stop 0.08
 ```
 

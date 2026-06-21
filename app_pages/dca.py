@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 from cjk_font import setup_cjk_font
 
-from dca_backtest import (
+from backend.dca_backtest import (
     fetch_fund_data as _fetch_fund_data,
     fetch_fund_name,
     generate_dca_dates,
