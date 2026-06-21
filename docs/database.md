@@ -169,4 +169,69 @@
 
 **记录数**: 3（fund_catalog, fund_fee, fund_nav）
 
+---
+
+## OOP 访问层
+
+```python
+# 所有表通过模块级单例访问，统一位于 db 模块下
+from db import fund_fees, fund_scale, fund_profile, fund_nav, fund_catalog
+```
+
+### 类体系
+
+```
+_FundTable                  基类：is_fresh / set_fresh / clear
+ ├── _DictTable             加载为 {code: dict}
+ │    ├── FundFeeTable      db.fund_fees    meta_key="fund_fee"
+ │    ├── FundScaleTable    db.fund_scale   meta_key=None
+ │    └── FundProfileTable  db.fund_profile meta_key=None
+ └── _BulkTable             全表 DataFrame 操作
+      ├── FundNavTable      db.fund_nav     meta_key="fund_nav"
+      └── FundCatalogTable  db.fund_catalog meta_key="fund_catalog"
+```
+
+### 方法说明
+
+| 方法 | _FundTable | _DictTable | _BulkTable | 说明 |
+|------|-----------|-----------|-----------|------|
+| `is_fresh(ttl)` | ✅ | 继承 | 继承 | 检查 `funds_meta` 的 `updated_at` 是否在 TTL 内 |
+| `set_fresh()` | ✅ | 继承 | 继承 | 写入当前时间戳到 `funds_meta` |
+| `clear()` | ✅ | 继承 | 继承 | `DELETE FROM 表` + 清理对应 `funds_meta` 记录 |
+| `_load_rows(codes)` | — | ✅ | — | `SELECT * FROM 表 WHERE 基金代码 IN (codes)` 返回 `{code: Row}` |
+| `load(codes)` | — | ✅ | — | 返回 `{code: {列名: 值, ...}}` |
+| `load()` | — | — | ✅ | 返回全表 `DataFrame` |
+| `save(df)` | — | — | ✅ | `df.to_sql(if_exists="replace")` + `set_fresh()` |
+| `cached_count()` | — | FundFeeTable 独有 | — | `SELECT COUNT(*) FROM fund_fee` |
+
+### 使用示例
+
+```python
+# dict 表
+fees = db.fund_fees.load(["000001", "161725"])
+# → {"000001": {"申购费": 0.15, "管理费": 1.2, ...}, ...}
+
+db.fund_fees.save("000001", 0.15, 1.2, 0.2, None, "1元", 1.55)
+
+db.fund_fees.is_fresh()        # 检查 fund_fee 缓存是否有效
+db.fund_fees.set_fresh()       # 标记 fund_fee 缓存新鲜
+db.fund_fees.cached_count()    # → 26770
+db.fund_fees.clear()           # DELETE FROM fund_fee + DELETE FROM funds_meta WHERE key='fund_fee'
+
+# bulk 表
+nav = db.fund_nav.load()       # → DataFrame (25333 行)
+db.fund_nav.save(df)           # 全量替换
+
+cat = db.fund_catalog.load()   # → DataFrame (27037 行)
+
+# freshness（meta_key=None 的表始终返回 False）
+db.fund_scale.is_fresh()       # → False（不追踪 TTL）
+```
+
+### 保持为独立函数的操作
+
+- `load_index_fund_nav()` — 5 表 JOIN（指数基净值+费率+规模+跟踪方式）
+- `load_pension_funds()` — 4 表 JOIN（Y 份额基金）
+- `load_series() / upsert_series() / is_series_fresh()` — 估值时序缓存
+- `clear_all()` — 清空所有缓存表
 
