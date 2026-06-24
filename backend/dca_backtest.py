@@ -243,14 +243,16 @@ def simulate_dca(
         if nav is None:
             continue
 
-        # ── 分红再投资（基于真实分红数据）──
-        if total_units > 0 and date in dividend_dict:
-            extra_units = total_units * dividend_dict[date] / nav
-            total_units += extra_units
-
-        # ── 申购 ──
         invested_today = 0.0
         units_added_today = 0.0
+        dividend_units_today = 0.0
+
+        # ── 分红再投资（基于真实分红数据）──
+        if total_units > 0 and date in dividend_dict:
+            dividend_units_today = total_units * dividend_dict[date] / nav
+            total_units += dividend_units_today
+
+        # ── 申购 ──
         if is_active and date in invest_set:
             actual = amount * (1 - purchase_rate)
             units_added_today = actual / nav
@@ -328,8 +330,8 @@ def simulate_dca(
         overall_profit = total_value - total_invested
         overall_return = overall_profit / total_invested if total_invested > 0 else 0.0
 
-        # 无止盈策略只记录定投日
-        if not stop_profit_on and date not in invest_set:
+        # 无止盈策略只记录定投日和分红日
+        if not stop_profit_on and date not in invest_set and dividend_units_today == 0:
             continue
 
         records.append(
@@ -338,6 +340,7 @@ def simulate_dca(
                 "nav": nav,
                 "investment": invested_today,
                 "units_added": units_added_today,
+                "dividend_units": dividend_units_today,
                 "total_units": total_units,
                 "total_cost": round_cost,
                 "market_value": market_value,
@@ -571,21 +574,40 @@ def main() -> None:
     else:
         display_detail = detail
 
-    print(f"{'日期':<12} {'净值':>8} {'投入':>8} {'份额':>8} {'累计份额':>10} {'市值':>10} {'收益率':>8}")
-    print("─" * 70)
-    for _, r in display_detail.iterrows():
+    has_dividend = display_detail["dividend_units"].sum() > 0
+    if has_dividend:
+        print(f"{'日期':<12} {'净值':>8} {'投入':>8} {'定投份额':>8} {'分红份额':>8} {'累计份额':>10} {'市值':>10} {'收益率':>8}")
+        print("─" * 80)
+        for _, r in display_detail.iterrows():
+            div_str = f"{r['dividend_units']:>8.2f}" if r["dividend_units"] > 0 else f"{'':>8}"
+            print(
+                f"{r['date'].strftime('%Y-%m-%d'):<12} {r['nav']:>8.4f} "
+                f"{r['investment']:>8.0f} {r['units_added']:>8.2f} {div_str} "
+                f"{r['total_units']:>10.2f} {r['market_value']:>10.2f} "
+                f"{r['return_rate'] * 100:>7.2f}%"
+            )
+        print("─" * 80)
         print(
-            f"{r['date'].strftime('%Y-%m-%d'):<12} {r['nav']:>8.4f} "
-            f"{r['investment']:>8.0f} {r['units_added']:>8.2f} "
-            f"{r['total_units']:>10.2f} {r['market_value']:>10.2f} "
-            f"{r['return_rate'] * 100:>7.2f}%"
+            f"{'合计':<12} {'':>8} {total_invest:>8.0f} {'':>8} {'':>8} "
+            f"{display_detail.iloc[-1]['total_units']:>10.2f} "
+            f"{final_val:>10.2f} {total_ret * 100:>7.2f}%"
         )
-    print("─" * 70)
-    print(
-        f"{'合计':<12} {'':>8} {total_invest:>8.0f} {'':>8} "
-        f"{display_detail.iloc[-1]['total_units']:>10.2f} "
-        f"{final_val:>10.2f} {total_ret * 100:>7.2f}%"
-    )
+    else:
+        print(f"{'日期':<12} {'净值':>8} {'投入':>8} {'份额':>8} {'累计份额':>10} {'市值':>10} {'收益率':>8}")
+        print("─" * 70)
+        for _, r in display_detail.iterrows():
+            print(
+                f"{r['date'].strftime('%Y-%m-%d'):<12} {r['nav']:>8.4f} "
+                f"{r['investment']:>8.0f} {r['units_added']:>8.2f} "
+                f"{r['total_units']:>10.2f} {r['market_value']:>10.2f} "
+                f"{r['return_rate'] * 100:>7.2f}%"
+            )
+        print("─" * 70)
+        print(
+            f"{'合计':<12} {'':>8} {total_invest:>8.0f} {'':>8} "
+            f"{display_detail.iloc[-1]['total_units']:>10.2f} "
+            f"{final_val:>10.2f} {total_ret * 100:>7.2f}%"
+        )
 
     if args.output:
         detail.to_csv(args.output, index=False, encoding="utf-8-sig")

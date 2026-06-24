@@ -252,7 +252,9 @@ if events:
 with st.expander("📋 交易明细", expanded=False):
     if stop_profit_on:
         event_dates = {e["date"] for e in events}
-        display = detail[(detail["investment"] > 0) | detail["date"].isin(event_dates)].copy()
+        display = detail[
+            (detail["investment"] > 0) | (detail["dividend_units"] > 0) | detail["date"].isin(event_dates)
+        ].copy()
     else:
         display = detail.copy()
 
@@ -261,7 +263,8 @@ with st.expander("📋 交易明细", expanded=False):
             "date": "日期",
             "nav": "净值",
             "investment": "投入",
-            "units_added": "新增份额",
+            "units_added": "申购份额",
+            "dividend_units": "分红再投",
             "total_units": "累计份额",
             "market_value": "市值",
             "return_rate": "收益率(%)",
@@ -269,7 +272,8 @@ with st.expander("📋 交易明细", expanded=False):
     ).copy()
     out["日期"] = out["日期"].dt.strftime("%Y-%m-%d")
     out["收益率(%)"] = out["收益率(%)"] * 100
-    cols = ["日期", "净值", "投入", "新增份额", "累计份额", "市值", "收益率(%)"]
+    cols = ["日期", "净值", "投入", "申购份额", "分红再投", "累计份额", "市值", "收益率(%)"]
+    out["分红再投"] = out["分红再投"].where(out["分红再投"] > 0, "")
     st.dataframe(out[cols], hide_index=True, use_container_width=True)
 
 csv = detail.to_csv(index=False, encoding="utf-8-sig").encode()
