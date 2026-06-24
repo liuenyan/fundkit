@@ -200,57 +200,16 @@ def simulate_dca(
     策略B（停投持有+移动止盈）: stop_invest + trailing_stop — 收益达标停投，回撤达标卖出，始终循环
     """
     nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
+    acc_dict = dict(zip(nav_df["date"], nav_df["acc_nav"]))
     strategy_a = take_profit is not None
     strategy_b = stop_invest is not None and trailing_stop is not None
     stop_profit_on = strategy_a or strategy_b
 
-    # ── 无止盈策略 ──
-    if not stop_profit_on:
-        records = []
-        total_units = 0.0
-        total_cost = 0.0
-        for date in invest_dates:
-            nav = nav_dict.get(date)
-            if nav is None:
-                continue
-            actual = amount * (1 - purchase_rate)
-            units = actual / nav
-            total_units += units
-            total_cost += amount
-            market_value = total_units * nav
-            records.append(
-                {
-                    "date": date,
-                    "nav": nav,
-                    "investment": amount,
-                    "units_added": units,
-                    "total_units": total_units,
-                    "total_cost": total_cost,
-                    "market_value": market_value,
-                    "profit": market_value - total_cost,
-                    "return_rate": (market_value - total_cost) / total_cost,
-                }
-            )
-        detail = pd.DataFrame(records)
-        if detail.empty:
-            print("错误：未生成有效的定投记录")
-            sys.exit(1)
-        latest_date = max(nav_dict.keys())
-        latest_nav = nav_dict[latest_date]
-        total_redeem_fee = 0.0
-        for _, row in detail.iterrows():
-            hold = (latest_date - row["date"]).days
-            fee_rate = get_redeem_rate(hold, redeem_schedule)
-            total_redeem_fee += row["units_added"] * latest_nav * fee_rate
-        final_val = detail.iloc[-1]["market_value"] - total_redeem_fee
-        return detail, [], total_redeem_fee, final_val
-
-    # ── 有止盈策略 ──
     all_dates = nav_df["date"].values
     invest_set = set(invest_dates)
 
-    records = []
-    events = []
+    records: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
 
     total_units = 0.0
     round_cost = 0.0
@@ -258,13 +217,28 @@ def simulate_dca(
     total_recovered = 0.0
     is_active = True
     peak_return = -float("inf")
-    fee_batches = []
+    fee_batches: list[dict[str, Any]] = []
+    prev_unit = None
+    prev_acc = None
 
     for d in all_dates:
         date = pd.Timestamp(d)
         nav = nav_dict.get(date)
-        if nav is None:
+        acc = acc_dict.get(date)
+        if nav is None or acc is None:
             continue
+
+        # ── 分红再投资 ──
+        if prev_unit is not None and prev_acc is not None and total_units > 0:
+            prev_div_gap = prev_acc - prev_unit
+            cur_div_gap = acc - nav
+            div_per_unit = cur_div_gap - prev_div_gap
+            if div_per_unit > 1e-8:
+                extra_units = total_units * div_per_unit / nav
+                total_units += extra_units
+
+        prev_unit = nav
+        prev_acc = acc
 
         # ── 申购 ──
         invested_today = 0.0
@@ -289,25 +263,26 @@ def simulate_dca(
         if total_units > 0 and round_return > peak_return:
             peak_return = round_return
 
-        # ── 策略检查 ──
+        # ── 策略检查（仅止盈策略分支） ──
         should_sell = False
         sell_reason = ""
 
-        if strategy_a and total_units > 0 and round_return >= take_profit:
-            should_sell = True
-            sell_reason = f"目标收益率 {take_profit * 100:.0f}%"
-
-        if strategy_b:
-            if total_units > 0 and round_return >= stop_invest:
-                is_active = False
-            if (
-                not is_active
-                and total_units > 0
-                and peak_return >= trailing_stop
-                and round_return <= peak_return - trailing_stop
-            ):
+        if stop_profit_on:
+            if strategy_a and total_units > 0 and round_return >= take_profit:
                 should_sell = True
-                sell_reason = f"移动止盈（回撤 {trailing_stop * 100:.0f}%）"
+                sell_reason = f"目标收益率 {take_profit * 100:.0f}%"
+
+            if strategy_b:
+                if total_units > 0 and round_return >= stop_invest:
+                    is_active = False
+                if (
+                    not is_active
+                    and total_units > 0
+                    and peak_return >= trailing_stop
+                    and round_return <= peak_return - trailing_stop
+                ):
+                    should_sell = True
+                    sell_reason = f"移动止盈（回撤 {trailing_stop * 100:.0f}%）"
 
         if should_sell:
             fee = 0.0
@@ -344,6 +319,10 @@ def simulate_dca(
         total_value = market_value + total_recovered
         overall_profit = total_value - total_invested
         overall_return = overall_profit / total_invested if total_invested > 0 else 0.0
+
+        # 无止盈策略只记录定投日
+        if not stop_profit_on and date not in invest_set:
+            continue
 
         records.append(
             {
@@ -393,7 +372,7 @@ def max_drawdown(series: pd.Series) -> float:
 
 
 def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None) -> dict[str, Any] | None:
-    """一次性投入收益计算"""
+    """一次性投入收益计算（含分红再投资）"""
     df = nav_df.copy()
     df = df[df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
     if df.empty:
@@ -403,12 +382,24 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
     actual = amount * (1 - purchase_rate)
     units = actual / first["unit_nav"]
 
-    end = pd.Timestamp(end_date)
-    end_row = df[df["date"] <= end]
-    if end_row.empty:
-        return None
-    last = end_row.iloc[-1]
+    prev_unit = first["unit_nav"]
+    prev_acc = first["acc_nav"]
 
+    for _, row in df.iloc[1:].iterrows():
+        nav = row["unit_nav"]
+        acc = row["acc_nav"]
+        if pd.isna(nav) or pd.isna(acc):
+            continue
+        if units > 0:
+            div_gap_prev = prev_acc - prev_unit
+            div_gap_cur = acc - nav
+            div_per_unit = div_gap_cur - div_gap_prev
+            if div_per_unit > 1e-8:
+                units += units * div_per_unit / nav
+        prev_unit = nav
+        prev_acc = acc
+
+    last = df.iloc[-1]
     val_before = units * last["unit_nav"]
     hold = (last["date"] - first["date"]).days
     fee_rate = get_redeem_rate(hold, redeem_schedule)
@@ -446,6 +437,7 @@ def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fun
     ax1 = axes[0]
     ax1.plot(nav_df["date"], nav_df["unit_nav"], color="steelblue", lw=1.2, alpha=0.9, label="单位净值")
     ax1.plot(nav_df["date"], nav_df["acc_nav"], color="steelblue", lw=0.8, ls="--", alpha=0.6, label="累计净值")
+
 
     if not detail.empty:
         avg = (detail["total_cost"] / detail["total_units"]).replace([np.inf, -np.inf], np.nan)
