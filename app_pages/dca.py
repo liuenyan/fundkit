@@ -272,8 +272,10 @@ with st.expander("📋 交易明细", expanded=False):
     ).copy()
     out["日期"] = out["日期"].dt.strftime("%Y-%m-%d")
     out["收益率(%)"] = out["收益率(%)"] * 100
+    out["分红再投"] = out["分红再投"].where(out["分红再投"] > 0).apply(
+        lambda x: f"{x:.2f}" if pd.notna(x) else ""
+    )
     cols = ["日期", "净值", "投入", "申购份额", "分红再投", "累计份额", "市值", "收益率(%)"]
-    out["分红再投"] = out["分红再投"].where(out["分红再投"] > 0, "")
     st.dataframe(out[cols], hide_index=True, use_container_width=True)
 
 csv = detail.to_csv(index=False, encoding="utf-8-sig").encode()
