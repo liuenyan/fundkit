@@ -116,6 +116,19 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
     return df
 
 
+def fetch_dividend_data(fund_code: str) -> pd.DataFrame:
+    """获取基金真实分红事件（天天基金网）"""
+    try:
+        df = ak.fund_open_fund_info_em(symbol=fund_code, indicator="分红送配详情", period="成立来")
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty or "暂无" in str(df.iloc[0, 0]):
+        return pd.DataFrame()
+    df["每份分红"] = df["每份分红"].str.extract(r"([\d.]+)").astype(float)
+    df["除息日"] = pd.to_datetime(df["除息日"])
+    return df[["除息日", "每份分红"]].sort_values("除息日").reset_index(drop=True)
+
+
 def fetch_fund_name(fund_code: str) -> str:
     """获取基金简称"""
     try:
@@ -193,6 +206,7 @@ def simulate_dca(
     tp_cycle: bool = False,
     stop_invest: float | None = None,
     trailing_stop: float | None = None,
+    dividend_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, list[dict[str, Any]], float, float]:
     """执行定投模拟
 
@@ -200,7 +214,11 @@ def simulate_dca(
     策略B（停投持有+移动止盈）: stop_invest + trailing_stop — 收益达标停投，回撤达标卖出，始终循环
     """
     nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
-    acc_dict = dict(zip(nav_df["date"], nav_df["acc_nav"]))
+    dividend_dict: dict[pd.Timestamp, float] = {}
+    if dividend_df is not None and not dividend_df.empty:
+        for _, r in dividend_df.iterrows():
+            dividend_dict[r["除息日"]] = r["每份分红"]
+
     strategy_a = take_profit is not None
     strategy_b = stop_invest is not None and trailing_stop is not None
     stop_profit_on = strategy_a or strategy_b
@@ -218,27 +236,17 @@ def simulate_dca(
     is_active = True
     peak_return = -float("inf")
     fee_batches: list[dict[str, Any]] = []
-    prev_unit = None
-    prev_acc = None
 
     for d in all_dates:
         date = pd.Timestamp(d)
         nav = nav_dict.get(date)
-        acc = acc_dict.get(date)
-        if nav is None or acc is None:
+        if nav is None:
             continue
 
-        # ── 分红再投资 ──
-        if prev_unit is not None and prev_acc is not None and total_units > 0:
-            prev_div_gap = prev_acc - prev_unit
-            cur_div_gap = acc - nav
-            div_per_unit = cur_div_gap - prev_div_gap
-            if div_per_unit > 0.005:
-                extra_units = total_units * div_per_unit / nav
-                total_units += extra_units
-
-        prev_unit = nav
-        prev_acc = acc
+        # ── 分红再投资（基于真实分红数据）──
+        if total_units > 0 and date in dividend_dict:
+            extra_units = total_units * dividend_dict[date] / nav
+            total_units += extra_units
 
         # ── 申购 ──
         invested_today = 0.0
@@ -371,8 +379,8 @@ def max_drawdown(series: pd.Series) -> float:
     return dd.min()
 
 
-def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None) -> dict[str, Any] | None:
-    """一次性投入收益计算（含分红再投资）"""
+def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None, dividend_df: pd.DataFrame | None = None) -> dict[str, Any] | None:
+    """一次性投入收益计算（基于真实分红数据再投资）"""
     df = nav_df.copy()
     df = df[df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
     if df.empty:
@@ -382,22 +390,14 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
     actual = amount * (1 - purchase_rate)
     units = actual / first["unit_nav"]
 
-    prev_unit = first["unit_nav"]
-    prev_acc = first["acc_nav"]
+    dividend_dict: dict[pd.Timestamp, float] = {}
+    if dividend_df is not None and not dividend_df.empty:
+        for _, r in dividend_df.iterrows():
+            dividend_dict[r["除息日"]] = r["每份分红"]
 
-    for _, row in df.iloc[1:].iterrows():
-        nav = row["unit_nav"]
-        acc = row["acc_nav"]
-        if pd.isna(nav) or pd.isna(acc):
-            continue
-        if units > 0:
-            div_gap_prev = prev_acc - prev_unit
-            div_gap_cur = acc - nav
-            div_per_unit = div_gap_cur - div_gap_prev
-            if div_per_unit > 0.005:
-                units += units * div_per_unit / nav
-        prev_unit = nav
-        prev_acc = acc
+    for _, row in df.iterrows():
+        if units > 0 and row["date"] in dividend_dict:
+            units += units * dividend_dict[row["date"]] / row["unit_nav"]
 
     last = df.iloc[-1]
     val_before = units * last["unit_nav"]
@@ -437,7 +437,6 @@ def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fun
     ax1 = axes[0]
     ax1.plot(nav_df["date"], nav_df["unit_nav"], color="steelblue", lw=1.2, alpha=0.9, label="单位净值")
     ax1.plot(nav_df["date"], nav_df["acc_nav"], color="steelblue", lw=0.8, ls="--", alpha=0.6, label="累计净值")
-
 
     if not detail.empty:
         avg = (detail["total_cost"] / detail["total_units"]).replace([np.inf, -np.inf], np.nan)
@@ -479,6 +478,7 @@ def main() -> None:
 
     nav_df = fetch_fund_data(args.fund, args.start, end_date)
     fund_name = fetch_fund_name(args.fund)
+    dividend_df = fetch_dividend_data(args.fund)
 
     invest_dates = generate_dca_dates(nav_df, args.freq, args.start, end_date, args.day, args.weekday)
     print(f"定投日期: {len(invest_dates)} 期")
@@ -500,6 +500,7 @@ def main() -> None:
         tp_cycle=args.tp_cycle,
         stop_invest=args.stop_invest if strategy_b else None,
         trailing_stop=args.trailing_stop if strategy_b else None,
+        dividend_df=dividend_df,
     )
 
     if stop_profit_on:
@@ -514,7 +515,7 @@ def main() -> None:
     value_col = "total_value" if stop_profit_on else "market_value"
     mdd = max_drawdown(detail[value_col])
 
-    lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee)
+    lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
 
     sep = "=" * 52
     print(f"""
