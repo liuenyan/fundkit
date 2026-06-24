@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from tools.cjk_font import setup_cjk_font
 
 from backend.dca_backtest import (
+    fetch_dividend_data,
     fetch_fund_data as _fetch_fund_data,
     fetch_fund_name,
     generate_dca_dates,
@@ -166,6 +167,7 @@ with st.spinner("正在获取数据并计算…"):
 
     nav_df = fetch_fund_data(fund_code, start_str, end_str)
     fund_name = fetch_fund_name(fund_code)
+    dividend_df = fetch_dividend_data(fund_code)
 
     invest_dates = generate_dca_dates(nav_df, freq, start_str, end_str, day, weekday)
     if invest_dates.empty:
@@ -185,6 +187,7 @@ with st.spinner("正在获取数据并计算…"):
         tp_cycle=tp_cycle,
         stop_invest=(stop_invest / 100) if strategy_b else None,
         trailing_stop=(trailing_stop / 100) if strategy_b else None,
+        dividend_df=dividend_df,
     )
 
     if stop_profit_on:
@@ -199,7 +202,7 @@ with st.spinner("正在获取数据并计算…"):
     value_col = "total_value" if stop_profit_on else "market_value"
     mdd = max_drawdown(detail[value_col])
 
-    lumpsum = calc_lumpsum(nav_df, total_invest, start_str, end_str, fee)
+    lumpsum = calc_lumpsum(nav_df, total_invest, start_str, end_str, fee / 100, dividend_df=dividend_df)
 
 st.success(f"✅ 回测完成！共 {len(invest_dates)} 期定投，{events and len(events) or 0} 次止盈")
 
