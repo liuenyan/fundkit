@@ -233,7 +233,7 @@ def simulate_dca(
             prev_div_gap = prev_acc - prev_unit
             cur_div_gap = acc - nav
             div_per_unit = cur_div_gap - prev_div_gap
-            if div_per_unit > 1e-8:
+            if div_per_unit > 0.005:
                 extra_units = total_units * div_per_unit / nav
                 total_units += extra_units
 
@@ -394,7 +394,7 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
             div_gap_prev = prev_acc - prev_unit
             div_gap_cur = acc - nav
             div_per_unit = div_gap_cur - div_gap_prev
-            if div_per_unit > 1e-8:
+            if div_per_unit > 0.005:
                 units += units * div_per_unit / nav
         prev_unit = nav
         prev_acc = acc
