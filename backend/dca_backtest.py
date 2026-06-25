@@ -7,6 +7,7 @@
 import argparse
 import os
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -196,6 +197,25 @@ def get_redeem_rate(hold_days: int, schedule: list[tuple[int, float]] | None = N
     return 0.0
 
 
+def build_dividend_dict(dividend_df: pd.DataFrame | None) -> dict[pd.Timestamp, float]:
+    """从分红数据构建 {除息日: 每份分红} 字典"""
+    if dividend_df is None or dividend_df.empty:
+        return {}
+    return dict(zip(dividend_df["除息日"], dividend_df["每份分红"]))
+
+
+@dataclass
+class DCAPosition:
+    """定投模拟状态"""
+    units: float = 0.0
+    cost: float = 0.0        # 当前轮次累计投入金额
+    total_invested: float = 0.0
+    total_recovered: float = 0.0
+    is_active: bool = True
+    peak_return: float = -float("inf")
+    fee_batches: list[dict] = field(default_factory=list)
+
+
 def simulate_dca(
     nav_df: pd.DataFrame,
     invest_dates: pd.DatetimeIndex,
@@ -214,142 +234,123 @@ def simulate_dca(
     策略B（停投持有+移动止盈）: stop_invest + trailing_stop — 收益达标停投，回撤达标卖出，始终循环
     """
     nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
-    dividend_dict: dict[pd.Timestamp, float] = {}
-    if dividend_df is not None and not dividend_df.empty:
-        for _, r in dividend_df.iterrows():
-            dividend_dict[r["除息日"]] = r["每份分红"]
+    dividend_dict = build_dividend_dict(dividend_df)
 
     strategy_a = take_profit is not None
     strategy_b = stop_invest is not None and trailing_stop is not None
     stop_profit_on = strategy_a or strategy_b
 
-    all_dates = nav_df["date"].values
     invest_set = set(invest_dates)
-
+    pos = DCAPosition()
     records: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
 
-    total_units = 0.0
-    round_cost = 0.0
-    total_invested = 0.0
-    total_recovered = 0.0
-    is_active = True
-    peak_return = -float("inf")
-    fee_batches: list[dict[str, Any]] = []
-
-    for d in all_dates:
+    for d in nav_df["date"]:
         date = pd.Timestamp(d)
         nav = nav_dict.get(date)
         if nav is None:
             continue
 
-        invested_today = 0.0
-        units_added_today = 0.0
-        dividend_units_today = 0.0
+        inv_today = 0.0
+        unit_added = 0.0
+        div_units = 0.0
 
-        # ── 分红再投资（基于真实分红数据）──
-        if total_units > 0 and date in dividend_dict:
-            dividend_units_today = total_units * dividend_dict[date] / nav
-            total_units += dividend_units_today
+        # ── 分红再投资 ──
+        if pos.units > 0 and date in dividend_dict:
+            div_units = pos.units * dividend_dict[date] / nav
+            pos.units += div_units
 
         # ── 申购 ──
-        if is_active and date in invest_set:
+        if pos.is_active and date in invest_set:
             actual = amount * (1 - purchase_rate)
-            units_added_today = actual / nav
-            total_units += units_added_today
-            round_cost += amount
-            total_invested += amount
-            invested_today = amount
-            fee_batches.append({"date": date, "units": units_added_today})
+            unit_added = actual / nav
+            pos.units += unit_added
+            pos.cost += amount
+            pos.total_invested += amount
+            inv_today = amount
+            pos.fee_batches.append({"date": date, "units": unit_added})
 
         # ── 当前持仓市值 ──
-        if total_units > 0:
-            market_value = total_units * nav
-            round_return = (market_value - round_cost) / round_cost
+        if pos.units > 0:
+            mkt_value = pos.units * nav
+            round_return = (mkt_value - pos.cost) / pos.cost
         else:
-            market_value = 0.0
+            mkt_value = 0.0
             round_return = 0.0
 
-        if total_units > 0 and round_return > peak_return:
-            peak_return = round_return
+        if pos.units > 0 and round_return > pos.peak_return:
+            pos.peak_return = round_return
 
-        # ── 策略检查（仅止盈策略分支） ──
+        # ── 策略检查 ──
         should_sell = False
         sell_reason = ""
 
         if stop_profit_on:
-            if strategy_a and total_units > 0 and round_return >= take_profit:
+            if strategy_a and pos.units > 0 and round_return >= take_profit:
                 should_sell = True
                 sell_reason = f"目标收益率 {take_profit * 100:.0f}%"
 
             if strategy_b:
-                if total_units > 0 and round_return >= stop_invest:
-                    is_active = False
+                if pos.units > 0 and round_return >= stop_invest:
+                    pos.is_active = False
                 if (
-                    not is_active
-                    and total_units > 0
-                    and peak_return >= trailing_stop
-                    and round_return <= peak_return - trailing_stop
+                    not pos.is_active
+                    and pos.units > 0
+                    and pos.peak_return >= trailing_stop
+                    and round_return <= pos.peak_return - trailing_stop
                 ):
                     should_sell = True
                     sell_reason = f"移动止盈（回撤 {trailing_stop * 100:.0f}%）"
 
         if should_sell:
             fee = 0.0
-            for b in fee_batches:
+            for b in pos.fee_batches:
                 hold = (date - b["date"]).days
                 rate = get_redeem_rate(hold, redeem_schedule)
                 fee += b["units"] * nav * rate
-            net_proceeds = market_value - fee
-            events.append(
-                {
-                    "date": date,
-                    "nav": nav,
-                    "return_rate": round_return,
-                    "round_cost": round_cost,
-                    "profit": market_value - round_cost,
-                    "redeem_fee": fee,
-                    "net_proceeds": net_proceeds,
-                    "reason": sell_reason,
-                }
-            )
-            total_recovered += net_proceeds
-            total_units = 0.0
-            round_cost = 0.0
-            market_value = 0.0
-            round_return = 0.0
-            peak_return = -float("inf")
-            fee_batches = []
-            if tp_cycle:
-                is_active = True
-            else:
-                is_active = False
-
-        # ── 整体组合指标 ──
-        total_value = market_value + total_recovered
-        overall_profit = total_value - total_invested
-        overall_return = overall_profit / total_invested if total_invested > 0 else 0.0
-
-        # 无止盈策略只记录定投日和分红日
-        if not stop_profit_on and date not in invest_set and dividend_units_today == 0:
-            continue
-
-        records.append(
-            {
+            net = mkt_value - fee
+            events.append({
                 "date": date,
                 "nav": nav,
-                "investment": invested_today,
-                "units_added": units_added_today,
-                "dividend_units": dividend_units_today,
-                "total_units": total_units,
-                "total_cost": round_cost,
-                "market_value": market_value,
-                "profit": overall_profit,
-                "return_rate": overall_return,
-                "total_invested": total_invested,
-                "total_value": total_value,
-            }
-        )
+                "return_rate": round_return,
+                "round_cost": pos.cost,
+                "profit": mkt_value - pos.cost,
+                "redeem_fee": fee,
+                "net_proceeds": net,
+                "reason": sell_reason,
+            })
+            pos.total_recovered += net
+            pos.units = 0.0
+            pos.cost = 0.0
+            mkt_value = 0.0
+            round_return = 0.0
+            pos.peak_return = -float("inf")
+            pos.fee_batches = []
+            pos.is_active = tp_cycle
+
+        # ── 整体组合指标 ──
+        total_value = mkt_value + pos.total_recovered
+        overall_profit = total_value - pos.total_invested
+        overall_return = overall_profit / pos.total_invested if pos.total_invested > 0 else 0.0
+
+        # 只记录定投日、分红日、止盈日
+        if not stop_profit_on and date not in invest_set and div_units == 0:
+            continue
+
+        records.append({
+            "date": date,
+            "nav": nav,
+            "investment": inv_today,
+            "units_added": unit_added,
+            "dividend_units": div_units,
+            "total_units": pos.units,
+            "total_cost": pos.cost,
+            "market_value": mkt_value,
+            "profit": overall_profit,
+            "return_rate": overall_return,
+            "total_invested": pos.total_invested,
+            "total_value": total_value,
+        })
 
     detail = pd.DataFrame(records)
     if detail.empty:
@@ -358,14 +359,15 @@ def simulate_dca(
 
     # ── 期末赎回费 ──
     final_redeem_fee = 0.0
-    if total_units > 0 and fee_batches:
+    if pos.units > 0 and pos.fee_batches:
         last_row = detail.iloc[-1]
-        for b in fee_batches:
+        for b in pos.fee_batches:
             hold = (last_row["date"] - b["date"]).days
             rate = get_redeem_rate(hold, redeem_schedule)
             final_redeem_fee += b["units"] * last_row["nav"] * rate
 
-    final_value = total_recovered + (market_value - final_redeem_fee)
+    last_market_value = detail.iloc[-1]["market_value"]
+    final_value = pos.total_recovered + (last_market_value - final_redeem_fee)
     return detail, events, final_redeem_fee, final_value
 
 
@@ -392,11 +394,7 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
     first = df.iloc[0]
     actual = amount * (1 - purchase_rate)
     units = actual / first["unit_nav"]
-
-    dividend_dict: dict[pd.Timestamp, float] = {}
-    if dividend_df is not None and not dividend_df.empty:
-        for _, r in dividend_df.iterrows():
-            dividend_dict[r["除息日"]] = r["每份分红"]
+    dividend_dict = build_dividend_dict(dividend_df)
 
     for _, row in df.iterrows():
         if units > 0 and row["date"] in dividend_dict:
@@ -475,6 +473,118 @@ def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fun
     print(f"图表已保存: {path}")
 
 
+def print_summary(
+    fund_name: str, fund_code: str, start: str, end: str, freq: str, amount: float, fee: float,
+    total_invest: float, portfolio_value: float, redeem_fee: float, final_val: float,
+    total_ret: float, ann_ret: float, mdd: float,
+    lumpsum: dict[str, Any] | None,
+) -> None:
+    sep = "=" * 52
+    print(f"""
+{sep}
+定投回测结果
+{sep}
+基金: {fund_name}（{fund_code}）
+回测期间: {start}  →  {end}
+定投频率: {freq:<8}  每期: {amount:>8,.2f} 元
+申购费率: {fee * 100:.2f}%
+
+{"─" * 52}
+总投入:        {total_invest:>12,.2f} 元
+期末市值:      {portfolio_value:>12,.2f} 元
+赎回费:        {redeem_fee:>12,.2f} 元
+实际到账:      {final_val:>12,.2f} 元
+总收益率:      {total_ret * 100:>12.2f}%
+年化收益率:    {ann_ret * 100:>12.2f}%
+最大回撤:      {mdd * 100:>12.2f}%
+
+{"─" * 52}
+一次性投入对比（同等金额 {total_invest:,.2f} 元）:
+""")
+    if lumpsum:
+        print(f"  最终价值:    {lumpsum['value_after_fee']:>12,.2f} 元")
+        print(f"  收益率:      {lumpsum['return_rate'] * 100:>12.2f}%")
+        diff = total_ret - lumpsum["return_rate"]
+        winner = "定投胜" if diff > 0 else ("一次性投入胜" if diff < 0 else "持平")
+        print(f"  差值:        {diff * 100:>+12.2f}%  ({winner})")
+    print(sep)
+
+
+def print_events(events: list[dict[str, Any]]) -> None:
+    if not events:
+        return
+    print(f"\n止盈事件（共 {len(events)} 次）:")
+    print(f"{'#':>3} {'日期':<12} {'净值':>8} {'收益率':>8} {'盈利':>10} {'赎回费':>8} {'原因'}")
+    print("─" * 70)
+    for i, e in enumerate(events, 1):
+        print(
+            f"{i:>3} {e['date'].strftime('%Y-%m-%d'):<12} {e['nav']:>8.4f} "
+            f"{e['return_rate'] * 100:>7.2f}% {e['profit']:>10.2f} "
+            f"{e['redeem_fee']:>8.2f} {e['reason']}"
+        )
+    total_event_profit = sum(e["profit"] for e in events)
+    total_event_fee = sum(e["redeem_fee"] for e in events)
+    print(f"{'─' * 70}")
+    print(f"{'合计':>3} {'':<12} {'':>8} {'':>8} {total_event_profit:>10.2f} {total_event_fee:>8.2f}")
+    print()
+
+
+def print_detail_table(detail: pd.DataFrame, total_invest: float, final_val: float, total_ret: float, stop_profit_on: bool, events: list[dict[str, Any]]) -> None:
+    """交易明细表格（支持分红列自动检测）"""
+    if stop_profit_on:
+        event_dates = {e["date"] for e in events}
+        display = detail[
+            (detail["investment"] > 0) | (detail["dividend_units"] > 0) | detail["date"].isin(event_dates)
+        ].copy()
+    else:
+        display = detail
+
+    has_div = display["dividend_units"].sum() > 0
+    cols = ["日期", "净值", "投入", "定投份额", "累计份额", "市值", "收益率"]
+    widths = [12, 8, 8, 8, 10, 10, 8]
+    sep_len = 70
+    if has_div:
+        cols.insert(4, "分红份额")
+        widths.insert(4, 8)
+        sep_len = 80
+
+    header = " ".join(f"{c:>{w}}" if w == widths[-1] else f"{c:<{w}}" if i == 0 else f"{c:>{w}}" for i, (c, w) in enumerate(zip(cols, widths)))
+    print(header)
+    print("─" * sep_len)
+
+    for _, r in display.iterrows():
+        cells = [
+            f"{r['date'].strftime('%Y-%m-%d'):<12}",
+            f"{r['nav']:>8.4f}",
+            f"{r['investment']:>8.0f}",
+            f"{r['units_added']:>8.2f}",
+        ]
+        if has_div:
+            cells.append(f"{r['dividend_units']:>8.2f}" if r["dividend_units"] > 0 else f"{'':>8}")
+        cells += [
+            f"{r['total_units']:>10.2f}",
+            f"{r['market_value']:>10.2f}",
+            f"{r['return_rate'] * 100:>7.2f}%",
+        ]
+        print(" ".join(cells))
+
+    print("─" * sep_len)
+    summary_cells = [
+        f"{'合计':<12}",
+        f"{'':>8}",
+        f"{total_invest:>8.0f}",
+        f"{'':>8}",
+    ]
+    if has_div:
+        summary_cells.append(f"{'':>8}")
+    summary_cells += [
+        f"{display.iloc[-1]['total_units']:>10.2f}",
+        f"{final_val:>10.2f}",
+        f"{total_ret * 100:>7.2f}%",
+    ]
+    print(" ".join(summary_cells))
+
+
 def main() -> None:
     args = parse_args()
     end_date = args.end or datetime.today().strftime("%Y-%m-%d")
@@ -520,94 +630,10 @@ def main() -> None:
 
     lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
 
-    sep = "=" * 52
-    print(f"""
-{sep}
-定投回测结果
-{sep}
-基金: {fund_name}（{args.fund}）
-回测期间: {args.start}  →  {end_date}
-定投频率: {args.freq:<8}  每期: {args.amount:>8,.2f} 元
-申购费率: {args.fee * 100:.2f}%
-
-{"─" * 52}
-总投入:        {total_invest:>12,.2f} 元
-期末市值:      {portfolio_value:>12,.2f} 元
-赎回费:        {redeem_fee:>12,.2f} 元
-实际到账:      {final_val:>12,.2f} 元
-总收益率:      {total_ret * 100:>12.2f}%
-年化收益率:    {ann_ret * 100:>12.2f}%
-最大回撤:      {mdd * 100:>12.2f}%
-
-{"─" * 52}
-一次性投入对比（同等金额 {total_invest:,.2f} 元）:
-""")
-    if lumpsum:
-        print(f"  最终价值:    {lumpsum['value_after_fee']:>12,.2f} 元")
-        print(f"  收益率:      {lumpsum['return_rate'] * 100:>12.2f}%")
-        diff = total_ret - lumpsum["return_rate"]
-        winner = "定投胜" if diff > 0 else ("一次性投入胜" if diff < 0 else "持平")
-        print(f"  差值:        {diff * 100:>+12.2f}%  ({winner})")
-    print(sep)
-
-    # ── 止盈事件输出 ──
-    if events:
-        print(f"\n止盈事件（共 {len(events)} 次）:")
-        print(f"{'#':>3} {'日期':<12} {'净值':>8} {'收益率':>8} {'盈利':>10} {'赎回费':>8} {'原因'}")
-        print("─" * 70)
-        for i, e in enumerate(events, 1):
-            print(
-                f"{i:>3} {e['date'].strftime('%Y-%m-%d'):<12} {e['nav']:>8.4f} "
-                f"{e['return_rate'] * 100:>7.2f}% {e['profit']:>10.2f} "
-                f"{e['redeem_fee']:>8.2f} {e['reason']}"
-            )
-        total_event_profit = sum(e["profit"] for e in events)
-        total_event_fee = sum(e["redeem_fee"] for e in events)
-        print(f"{'─' * 70}")
-        print(f"{'合计':>3} {'':<12} {'':>8} {'':>8} {total_event_profit:>10.2f} {total_event_fee:>8.2f}")
-        print()
-
-    # ── 交易明细（无止盈时显示全部；有止盈时仅显示定投日和止盈日） ──
-    if stop_profit_on:
-        event_dates = {e["date"] for e in events}
-        display_detail = detail[(detail["investment"] > 0) | detail["date"].isin(event_dates)].copy()
-    else:
-        display_detail = detail
-
-    has_dividend = display_detail["dividend_units"].sum() > 0
-    if has_dividend:
-        print(f"{'日期':<12} {'净值':>8} {'投入':>8} {'定投份额':>8} {'分红份额':>8} {'累计份额':>10} {'市值':>10} {'收益率':>8}")
-        print("─" * 80)
-        for _, r in display_detail.iterrows():
-            div_str = f"{r['dividend_units']:>8.2f}" if r["dividend_units"] > 0 else f"{'':>8}"
-            print(
-                f"{r['date'].strftime('%Y-%m-%d'):<12} {r['nav']:>8.4f} "
-                f"{r['investment']:>8.0f} {r['units_added']:>8.2f} {div_str} "
-                f"{r['total_units']:>10.2f} {r['market_value']:>10.2f} "
-                f"{r['return_rate'] * 100:>7.2f}%"
-            )
-        print("─" * 80)
-        print(
-            f"{'合计':<12} {'':>8} {total_invest:>8.0f} {'':>8} {'':>8} "
-            f"{display_detail.iloc[-1]['total_units']:>10.2f} "
-            f"{final_val:>10.2f} {total_ret * 100:>7.2f}%"
-        )
-    else:
-        print(f"{'日期':<12} {'净值':>8} {'投入':>8} {'份额':>8} {'累计份额':>10} {'市值':>10} {'收益率':>8}")
-        print("─" * 70)
-        for _, r in display_detail.iterrows():
-            print(
-                f"{r['date'].strftime('%Y-%m-%d'):<12} {r['nav']:>8.4f} "
-                f"{r['investment']:>8.0f} {r['units_added']:>8.2f} "
-                f"{r['total_units']:>10.2f} {r['market_value']:>10.2f} "
-                f"{r['return_rate'] * 100:>7.2f}%"
-            )
-        print("─" * 70)
-        print(
-            f"{'合计':<12} {'':>8} {total_invest:>8.0f} {'':>8} "
-            f"{display_detail.iloc[-1]['total_units']:>10.2f} "
-            f"{final_val:>10.2f} {total_ret * 100:>7.2f}%"
-        )
+    print_summary(fund_name, args.fund, args.start, end_date, args.freq, args.amount, args.fee,
+                  total_invest, portfolio_value, redeem_fee, final_val, total_ret, ann_ret, mdd, lumpsum)
+    print_events(events)
+    print_detail_table(detail, total_invest, final_val, total_ret, stop_profit_on, events)
 
     if args.output:
         detail.to_csv(args.output, index=False, encoding="utf-8-sig")

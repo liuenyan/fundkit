@@ -89,3 +89,7 @@ main()
 - `generate_dca_dates()` walks forward up to 10 trading days from the candidate date. If no match in 10 days, the date is skipped silently.
 - The simulated return rate (`round_return`) can exceed the `--take-profit` / `--stop-invest` target if NAV gaps significantly between trading days (especially for volatile commodity/oil funds like 110026). This is mathematically correct — DCA buys more shares at low prices, amplifying returns on recovery.
 - For monthly frequency: `day` is clamped to 28 (funds always have NAV on those days or before). For Chinese funds, day 28+ is safer than day 30/31.
+
+## Git rules
+
+- 每次编写完新代码后，不提交到 git 仓库，待用户发出指令再提交。
