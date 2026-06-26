@@ -40,7 +40,10 @@ main()
 ├─ fetch_fund_data()       # AKShare → unit_nav + acc_nav
 ├─ fetch_fund_name()       # AKShare fund name lookup
 ├─ generate_dca_dates()    # calendar → nearest trading day
-├─ simulate_dca()          # core backtest loop
+├─ simulate_dca()          # core backtest loop (uses strategy objects)
+│  ├─ FixedBuyStrategy     # 定期定额买入 (backend/strategy.py)
+│  ├─ TargetProfitSellStrategy  # 目标止盈卖出 (backend/strategy.py)
+│  └─ TrailingStopSellStrategy  # 移动回撤卖出 (backend/strategy.py)
 ├─ calc_lumpsum()          # lump-sum comparison
 └─ plot_results()          # matplotlib (2-panel chart)
 ```

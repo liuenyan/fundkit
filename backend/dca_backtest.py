@@ -7,7 +7,6 @@
 import argparse
 import os
 import sys
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -19,6 +18,14 @@ import numpy as np
 import pandas as pd
 
 from tools.cjk_font import setup_cjk_font
+from backend.strategy import (
+    BuyStrategy,
+    DCAPosition,
+    FixedBuyStrategy,
+    SellStrategy,
+    TargetProfitSellStrategy,
+    TrailingStopSellStrategy,
+)
 
 try:
     import akshare as ak
@@ -204,18 +211,6 @@ def build_dividend_dict(dividend_df: pd.DataFrame | None) -> dict[pd.Timestamp, 
     return dict(zip(dividend_df["除息日"], dividend_df["每份分红"]))
 
 
-@dataclass
-class DCAPosition:
-    """定投模拟状态"""
-    units: float = 0.0
-    cost: float = 0.0        # 当前轮次累计投入金额
-    total_invested: float = 0.0
-    total_recovered: float = 0.0
-    is_active: bool = True
-    peak_return: float = -float("inf")
-    fee_batches: list[dict] = field(default_factory=list)
-
-
 def simulate_dca(
     nav_df: pd.DataFrame,
     invest_dates: pd.DatetimeIndex,
@@ -227,19 +222,30 @@ def simulate_dca(
     stop_invest: float | None = None,
     trailing_stop: float | None = None,
     dividend_df: pd.DataFrame | None = None,
+    buy_strategy: BuyStrategy | None = None,
+    sell_strategies: list[SellStrategy] | None = None,
 ) -> tuple[pd.DataFrame, list[dict[str, Any]], float, float]:
     """执行定投模拟
 
-    策略A（目标止盈）: take_profit — 收益达目标即卖出，可选 tp_cycle 循环
-    策略B（停投持有+移动止盈）: stop_invest + trailing_stop — 收益达标停投，回撤达标卖出，始终循环
+    Parameters
+    ----------
+    buy_strategy / sell_strategies : 策略对象（优先使用）
+    amount/purchase_rate/take_profit/... : 平参（当策略对象为 None 时自动构造）
     """
     nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
     dividend_dict = build_dividend_dict(dividend_df)
 
-    strategy_a = take_profit is not None
-    strategy_b = stop_invest is not None and trailing_stop is not None
-    stop_profit_on = strategy_a or strategy_b
+    # 从平参自动构造策略
+    if buy_strategy is None:
+        buy_strategy = FixedBuyStrategy(amount, purchase_rate)
+    if sell_strategies is None:
+        sell_strategies = []
+        if take_profit is not None:
+            sell_strategies.append(TargetProfitSellStrategy(take_profit))
+        if stop_invest is not None and trailing_stop is not None:
+            sell_strategies.append(TrailingStopSellStrategy(stop_invest, trailing_stop))
 
+    stop_profit_on = bool(sell_strategies)
     invest_set = set(invest_dates)
     pos = DCAPosition()
     records: list[dict[str, Any]] = []
@@ -260,14 +266,15 @@ def simulate_dca(
             div_units = pos.units * dividend_dict[date] / nav
             pos.units += div_units
 
-        # ── 申购 ──
-        if pos.is_active and date in invest_set:
-            actual = amount * (1 - purchase_rate)
+        # ── 申购（委托买入策略）──
+        action = buy_strategy.should_buy(date, nav, pos, invest_set)
+        if action.amount > 0:
+            actual = action.amount * (1 - purchase_rate)
             unit_added = actual / nav
             pos.units += unit_added
-            pos.cost += amount
-            pos.total_invested += amount
-            inv_today = amount
+            pos.cost += action.amount
+            pos.total_invested += action.amount
+            inv_today = action.amount
             pos.fee_batches.append({"date": date, "units": unit_added})
 
         # ── 当前持仓市值 ──
@@ -281,26 +288,20 @@ def simulate_dca(
         if pos.units > 0 and round_return > pos.peak_return:
             pos.peak_return = round_return
 
-        # ── 策略检查 ──
+        # ── 卖出检查（委托卖出策略列表，先触发先执行）──
         should_sell = False
         sell_reason = ""
+        triggered_strat: SellStrategy | None = None
 
-        if stop_profit_on:
-            if strategy_a and pos.units > 0 and round_return >= take_profit:
+        for strat in sell_strategies:
+            signal = strat.evaluate(date, nav, pos, mkt_value, round_return)
+            if signal.stop_buying:
+                pos.is_active = False
+            if signal.should_sell:
                 should_sell = True
-                sell_reason = f"目标收益率 {take_profit * 100:.0f}%"
-
-            if strategy_b:
-                if pos.units > 0 and round_return >= stop_invest:
-                    pos.is_active = False
-                if (
-                    not pos.is_active
-                    and pos.units > 0
-                    and pos.peak_return >= trailing_stop
-                    and round_return <= pos.peak_return - trailing_stop
-                ):
-                    should_sell = True
-                    sell_reason = f"移动止盈（回撤 {trailing_stop * 100:.0f}%）"
+                sell_reason = signal.reason
+                triggered_strat = strat
+                break
 
         if should_sell:
             fee = 0.0
@@ -327,13 +328,15 @@ def simulate_dca(
             pos.peak_return = -float("inf")
             pos.fee_batches = []
             pos.is_active = tp_cycle
+            if triggered_strat is not None:
+                triggered_strat.on_reset()
 
         # ── 整体组合指标 ──
         total_value = mkt_value + pos.total_recovered
         overall_profit = total_value - pos.total_invested
         overall_return = overall_profit / pos.total_invested if pos.total_invested > 0 else 0.0
 
-        # 只记录定投日、分红日、止盈日
+        # 无止盈策略只记录定投日和分红日
         if not stop_profit_on and date not in invest_set and div_units == 0:
             continue
 
@@ -600,33 +603,34 @@ def main() -> None:
         print("错误：未能生成有效的定投日期")
         sys.exit(1)
 
-    strategy_a = args.take_profit > 0
-    strategy_b = args.stop_invest > 0 and args.trailing_stop > 0
-    stop_profit_on = strategy_a or strategy_b
+    # 构造策略对象
+    buy_strategy = FixedBuyStrategy(args.amount, args.fee)
+    sell_strategies: list[SellStrategy] = []
+    if args.take_profit > 0:
+        sell_strategies.append(TargetProfitSellStrategy(args.take_profit))
+    if args.stop_invest > 0 and args.trailing_stop > 0:
+        sell_strategies.append(TrailingStopSellStrategy(args.stop_invest, args.trailing_stop))
+    stop_profit_on = bool(sell_strategies)
 
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df,
         invest_dates,
         args.amount,
         args.fee,
-        take_profit=args.take_profit if strategy_a else None,
+        take_profit=None,
         tp_cycle=args.tp_cycle,
-        stop_invest=args.stop_invest if strategy_b else None,
-        trailing_stop=args.trailing_stop if strategy_b else None,
+        stop_invest=None,
+        trailing_stop=None,
         dividend_df=dividend_df,
+        buy_strategy=buy_strategy,
+        sell_strategies=sell_strategies if sell_strategies else None,
     )
 
-    if stop_profit_on:
-        total_invest = detail.iloc[-1]["total_value"] - detail.iloc[-1]["profit"]
-        portfolio_value = detail.iloc[-1]["total_value"]
-    else:
-        total_invest = detail.iloc[-1]["total_cost"]
-        portfolio_value = detail.iloc[-1]["market_value"]
-
+    total_invest = detail.iloc[-1]["total_invested"]
+    portfolio_value = detail.iloc[-1]["total_value"]
     total_ret = (final_val - total_invest) / total_invest
     ann_ret = calc_annualized(total_ret, pd.Timestamp(args.start), pd.Timestamp(end_date))
-    value_col = "total_value" if stop_profit_on else "market_value"
-    mdd = max_drawdown(detail[value_col])
+    mdd = max_drawdown(detail["total_value"])
 
     lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
 

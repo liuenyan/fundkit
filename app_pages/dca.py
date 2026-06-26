@@ -29,6 +29,7 @@ from backend.dca_backtest import (
     calc_annualized,
     max_drawdown,
 )
+from backend.strategy import FixedBuyStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 
@@ -51,7 +52,7 @@ def simulate_dca(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
     return safe_call(_simulate_dca, *args, **kwargs)
 
 
-def make_charts(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str, stop_profit_on: bool) -> None:
+def make_charts(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str) -> None:
     setup_cjk_font()
 
     fig, axes = plt.subplots(2, 1, figsize=(12, 10), sharex=False)
@@ -71,9 +72,8 @@ def make_charts(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund
     if not detail.empty:
         ret = detail["return_rate"] * 100
         ax2.plot(detail["date"], ret, color="forestgreen", lw=2, label="定投收益率")
-        dd_col = "total_value" if stop_profit_on else "market_value"
-        roll_max = detail[dd_col].expanding().max()
-        dd = (detail[dd_col] - roll_max) / roll_max * 100
+        roll_max = detail["total_value"].expanding().max()
+        dd = (detail["total_value"] - roll_max) / roll_max * 100
         ax2.fill_between(detail["date"].values, 0, dd.values, alpha=0.25, color="firebrick", label="回撤", step="pre")
     ax2.axhline(y=0, color="gray", ls="--", lw=0.6)
     ax2.set_title(f"{fund_name}（{fund_code}）定投收益率与回撤")
@@ -174,33 +174,32 @@ with st.spinner("正在获取数据并计算…"):
         st.error("未能生成有效的定投日期，请检查参数")
         st.stop()
 
-    strategy_a = strategy == "策略A: 目标止盈"
-    strategy_b = strategy == "策略B: 停投持有+移动止盈"
-    stop_profit_on = strategy_a or strategy_b
+    ui_sell_strategies = []
+    if strategy == "策略A: 目标止盈":
+        ui_sell_strategies.append(TargetProfitSellStrategy(take_profit / 100))
+    elif strategy == "策略B: 停投持有+移动止盈":
+        ui_sell_strategies.append(TrailingStopSellStrategy(stop_invest / 100, trailing_stop / 100))
+    stop_profit_on = bool(ui_sell_strategies)
 
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df,
         invest_dates,
         amount,
         fee / 100,
-        take_profit=(take_profit / 100) if strategy_a else None,
+        take_profit=None,
         tp_cycle=tp_cycle,
-        stop_invest=(stop_invest / 100) if strategy_b else None,
-        trailing_stop=(trailing_stop / 100) if strategy_b else None,
+        stop_invest=None,
+        trailing_stop=None,
         dividend_df=dividend_df,
+        buy_strategy=FixedBuyStrategy(amount, fee / 100),
+        sell_strategies=ui_sell_strategies if ui_sell_strategies else None,
     )
 
-    if stop_profit_on:
-        total_invest = detail.iloc[-1]["total_value"] - detail.iloc[-1]["profit"]
-        portfolio_value = detail.iloc[-1]["total_value"]
-    else:
-        total_invest = detail.iloc[-1]["total_cost"]
-        portfolio_value = detail.iloc[-1]["market_value"]
-
+    total_invest = detail.iloc[-1]["total_invested"]
+    portfolio_value = detail.iloc[-1]["total_value"]
     total_ret = (final_val - total_invest) / total_invest
     ann_ret = calc_annualized(total_ret, pd.Timestamp(start_str), pd.Timestamp(end_str))
-    value_col = "total_value" if stop_profit_on else "market_value"
-    mdd = max_drawdown(detail[value_col])
+    mdd = max_drawdown(detail["total_value"])
 
     lumpsum = calc_lumpsum(nav_df, total_invest, start_str, end_str, fee / 100, dividend_df=dividend_df)
 
@@ -217,7 +216,7 @@ c1.metric("总收益率", f"{total_ret * 100:.2f}%")
 c2.metric("年化收益率", f"{ann_ret * 100:.2f}%")
 c3.metric("最大回撤", f"{mdd * 100:.2f}%", delta=f"{mdd * 100:.2f}%", delta_color="inverse")
 
-fig = make_charts(nav_df, detail, fund_code, fund_name, stop_profit_on)
+fig = make_charts(nav_df, detail, fund_code, fund_name)
 st.pyplot(fig)
 
 if lumpsum:
