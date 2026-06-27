@@ -24,7 +24,8 @@ class DCAPosition:
 @dataclass
 class BuyAction:
     """买入动作"""
-    amount: float = 0.0  # 0 = 不投
+    amount: float = 0.0  # 总投入金额（含申购费），0 = 不投
+    fee_rate: float = 0.0  # 申购费率（如 0.0015）
 
 
 class BuyStrategy(ABC):
@@ -45,7 +46,7 @@ class FixedBuyStrategy(BuyStrategy):
     def should_buy(self, date: pd.Timestamp, nav: float, pos: DCAPosition,
                    invest_set: set[pd.Timestamp]) -> BuyAction:
         if pos.is_active and date in invest_set:
-            return BuyAction(amount=self.amount)
+            return BuyAction(amount=self.amount, fee_rate=self.purchase_rate)
         return BuyAction(0)
 
 

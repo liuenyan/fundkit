@@ -29,7 +29,7 @@ from backend.dca_backtest import (
     calc_annualized,
     max_drawdown,
 )
-from backend.strategy import FixedBuyStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy
+from backend.strategy import FixedBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 
@@ -174,25 +174,19 @@ with st.spinner("正在获取数据并计算…"):
         st.error("未能生成有效的定投日期，请检查参数")
         st.stop()
 
-    ui_sell_strategies = []
+    sell_strategy: SellStrategy | None = None
     if strategy == "策略A: 目标止盈":
-        ui_sell_strategies.append(TargetProfitSellStrategy(take_profit / 100))
+        sell_strategy = TargetProfitSellStrategy(take_profit / 100)
     elif strategy == "策略B: 停投持有+移动止盈":
-        ui_sell_strategies.append(TrailingStopSellStrategy(stop_invest / 100, trailing_stop / 100))
-    stop_profit_on = bool(ui_sell_strategies)
+        sell_strategy = TrailingStopSellStrategy(stop_invest / 100, trailing_stop / 100)
 
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df,
         invest_dates,
-        amount,
-        fee / 100,
-        take_profit=None,
+        FixedBuyStrategy(amount, fee / 100),
+        sell_strategy=sell_strategy,
         tp_cycle=tp_cycle,
-        stop_invest=None,
-        trailing_stop=None,
         dividend_df=dividend_df,
-        buy_strategy=FixedBuyStrategy(amount, fee / 100),
-        sell_strategies=ui_sell_strategies if ui_sell_strategies else None,
     )
 
     total_invest = detail.iloc[-1]["total_invested"]
@@ -249,7 +243,7 @@ if events:
         st.dataframe(ev_df, hide_index=True, use_container_width=True)
 
 with st.expander("📋 交易明细", expanded=False):
-    if stop_profit_on:
+    if sell_strategy is not None:
         event_dates = {e["date"] for e in events}
         display = detail[
             (detail["investment"] > 0) | (detail["dividend_units"] > 0) | detail["date"].isin(event_dates)
