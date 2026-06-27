@@ -140,7 +140,7 @@ def get_or_update_series(name: str, metric: str, source: str, fetch_fn: Callable
 
 
 def clear_cache() -> None:
-    db.clear_all()
+    db.clear_index_cache()
 
 
 def _get_series(cfg: dict[str, Any], metric: str = "pe") -> tuple[pd.DataFrame | None, bool]:

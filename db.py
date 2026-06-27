@@ -466,12 +466,21 @@ def load_pension_funds() -> pd.DataFrame | None:
 # ── 全局操作 ──
 
 
-def clear_all() -> None:
+def clear_index_cache() -> None:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM index_series"))
         conn.execute(text("DELETE FROM cache_meta"))
-        conn.execute(text("DELETE FROM funds_meta WHERE key LIKE 'fund%' OR key LIKE 'index%'"))
+
+
+def clear_fund_cache() -> None:
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM funds_meta WHERE key LIKE 'fund%'"))
         conn.execute(text("DELETE FROM fund_fee"))
         conn.execute(text("DELETE FROM fund_scale"))
         conn.execute(text("DELETE FROM fund_nav"))
         conn.execute(text("DELETE FROM fund_profile"))
+
+
+def clear_all() -> None:
+    clear_index_cache()
+    clear_fund_cache()
