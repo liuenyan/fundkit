@@ -35,8 +35,8 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
     db.init_db()
 
     # ── TTL 检查 ──
-    if not force and not codes and db.fund_fees.is_fresh():
-        cnt = db.fund_fees.cached_count()
+    if not force and not codes and db.fund_fee.is_fresh():
+        cnt = db.fund_fee.cached_count()
         print(f"费率缓存有效，已缓存 {cnt} 只基金，跳过。使用 --force 强制重采。")
         return
 
@@ -54,7 +54,7 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
     # ── Step 1: 保存申购费 + 起购金额 ──
     print("Step 1/2 — 保存申购费 + 起购金额…")
     for code, (purchase, min_purchase) in purchase_data.items():
-        db.fund_fees.save(code, purchase, None, None, None, min_purchase, None)
+        db.fund_fee.save(code, purchase, None, None, None, min_purchase, None)
     print(f"  → 已保存 {len(purchase_data)} 只基金申购费数据\n")
 
     # ── Step 2: 并发获取管理费/托管费/销售服务费 ──
@@ -63,7 +63,7 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
     success = 0
     failed = 0
 
-    load_cached = db.fund_fees.load(all_codes)
+    load_cached = db.fund_fee.load(all_codes)
 
     def _persist(code: str, result: dict | None) -> None:
         nonlocal success, failed
@@ -93,7 +93,7 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
 
     # ── 标记缓存新鲜 ──
     if not codes:
-        db.fund_fees.set_fresh()
+        db.fund_fee.set_fresh()
         print("  费率缓存 TTL 已更新")
 
 

@@ -143,7 +143,7 @@ def save_overview_result(code: str, result: tuple | None, purchase: float | None
         if mgmt is not None and cust is not None
         else None
     )
-    db.fund_fees.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
+    db.fund_fee.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
     db.fund_scale.save(code, scale, scale_shares)
     db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
 
@@ -163,7 +163,7 @@ def fetch_mgmt_cust_fees(codes: list[str], progress_placeholder: Any = None) -> 
     scale_shares_map = {}
 
     # ── 从 DB 缓存读取 ──
-    cached = db.fund_fees.load(codes)
+    cached = db.fund_fee.load(codes)
     scale_raw = db.fund_scale.load(codes)
     for c, v in scale_raw.items():
         scale_map[c] = v["净资产规模"]

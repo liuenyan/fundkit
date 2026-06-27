@@ -210,7 +210,7 @@ class FundFeeTable(_DictTable):
              sales_service: float | None, min_purchase: str | None, total: float | None) -> None:
         with engine.begin() as conn:
             conn.execute(
-                fund_fee.insert().prefix_with("OR REPLACE"),
+                self.table.insert().prefix_with("OR REPLACE"),
                 {"基金代码": code, "申购费": purchase, "管理费": mgmt,
                  "托管费": cust, "销售服务费": sales_service,
                  "起购金额": min_purchase, "综合费率": total,
@@ -240,7 +240,7 @@ class FundScaleTable(_DictTable):
     def save(self, code: str, scale: float | None, shares: float | None = None) -> None:
         with engine.begin() as conn:
             conn.execute(
-                fund_scale.insert().prefix_with("OR REPLACE"),
+                self.table.insert().prefix_with("OR REPLACE"),
                 {"基金代码": code, "净资产规模": scale,
                  "份额规模": shares, "updated_at": time.time()},
             )
@@ -267,7 +267,7 @@ class FundProfileTable(_DictTable):
              track_method: str | None = None) -> None:
         with engine.begin() as conn:
             conn.execute(
-                fund_profile.insert().prefix_with("OR REPLACE"),
+                self.table.insert().prefix_with("OR REPLACE"),
                 {"基金代码": code, "发行日期": issue_date,
                  "成立日期": establish_date, "基金管理人": mgr,
                  "基金托管人": custodian, "基金经理": fund_mgr,
@@ -311,7 +311,7 @@ class FundCatalogTable(_BulkTable):
 
 
 # ── 单例实例 ──
-fund_fees = FundFeeTable()
+fund_fee = FundFeeTable()
 fund_scale = FundScaleTable()
 fund_profile = FundProfileTable()
 fund_nav = FundNavTable()
