@@ -8,7 +8,8 @@ import streamlit as st
 dca = st.Page("app_pages/dca.py", title="定投回测", icon="📊", url_path="dca")
 val = st.Page("app_pages/index_valuation.py", title="指数估值", icon="📈", url_path="valuation")
 idx = st.Page("app_pages/index_fund.py", title="指数选基", icon="🎯", url_path="index_fund")
+query = st.Page("app_pages/fund_query.py", title="基金查询", icon="🔍", url_path="fund_query")
 pension = st.Page("app_pages/pension_fund.py", title="养老金选基", icon="🏦", url_path="pension")
 
-pg = st.navigation([dca, val, idx, pension])
+pg = st.navigation([dca, val, idx, query, pension])
 pg.run()
