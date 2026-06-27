@@ -33,7 +33,7 @@ def fmt_scale(v: Any) -> str:
         s = float(v)
         if s >= 1:
             return f"{s:.1f}亿"
-        return f"{s * 100:.0f}万"
+        return f"{s * 10000:.0f}万"
     except (ValueError, TypeError):
         return str(v)
 
