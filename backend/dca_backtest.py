@@ -14,10 +14,9 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
-from tools.cjk_font import setup_cjk_font
+from backend.charting import create_chart
 from backend.strategy import (
     BuyStrategy,
     DCAPosition,
@@ -211,6 +210,16 @@ def build_dividend_dict(dividend_df: pd.DataFrame | None) -> dict[pd.Timestamp, 
     return dict(zip(dividend_df["除息日"], dividend_df["每份分红"]))
 
 
+def reinvest_dividends(
+    units: float, nav: float, date: pd.Timestamp,
+    dividend_dict: dict[pd.Timestamp, float],
+) -> float:
+    """计算分红再投资新增份额"""
+    if units > 0 and date in dividend_dict:
+        return units * dividend_dict[date] / nav
+    return 0.0
+
+
 def calc_redeem_fee(
     fee_batches: list[dict],
     date: pd.Timestamp,
@@ -256,8 +265,8 @@ def simulate_dca(
         div_units = 0.0
 
         # ── 分红再投资 ──
-        if pos.units > 0 and date in dividend_dict:
-            div_units = pos.units * dividend_dict[date] / nav
+        div_units = reinvest_dividends(pos.units, nav, date, dividend_dict)
+        if div_units > 0:
             pos.units += div_units
 
         # ── 申购（委托买入策略）──
@@ -383,8 +392,7 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
     dividend_dict = build_dividend_dict(dividend_df)
 
     for _, row in df.iterrows():
-        if units > 0 and row["date"] in dividend_dict:
-            units += units * dividend_dict[row["date"]] / row["unit_nav"]
+        units += reinvest_dividends(units, row["unit_nav"], row["date"], dividend_dict)
 
     last = df.iloc[-1]
     val_before = units * last["unit_nav"]
@@ -404,58 +412,20 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
 
 
 def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str, start_date: str, end_date: str, chart_dir: str) -> None:
-    """生成分析图表"""
+    """生成分析图表并保存到文件"""
     os.makedirs(chart_dir, exist_ok=True)
 
-    setup_cjk_font()
-
     assert not nav_df.empty, "nav_df 为空"
-    assert "unit_nav" in nav_df.columns, f"nav_df 缺少 unit_nav: {list(nav_df.columns)}"
-    assert "acc_nav" in nav_df.columns, f"nav_df 缺少 acc_nav: {list(nav_df.columns)}"
-    assert nav_df["unit_nav"].notna().any(), "unit_nav 全是 NaN"
-    assert nav_df["acc_nav"].notna().any(), "acc_nav 全是 NaN"
+    assert "unit_nav" in nav_df.columns
+    assert "acc_nav" in nav_df.columns
     if not detail.empty:
         assert "total_cost" in detail.columns
         assert "total_units" in detail.columns
 
-    fig, axes = plt.subplots(2, 1, figsize=(12, 10), sharex=False)
-
-    # --- 子图1: 净值走势与定投成本 ---
-    ax1 = axes[0]
-    ax1.plot(nav_df["date"], nav_df["unit_nav"], color="steelblue", lw=1.2, alpha=0.9, label="单位净值")
-    ax1.plot(nav_df["date"], nav_df["acc_nav"], color="steelblue", lw=0.8, ls="--", alpha=0.6, label="累计净值")
-
-    if not detail.empty:
-        avg = (detail["total_cost"] / detail["total_units"]).replace([np.inf, -np.inf], np.nan)
-        ax1.plot(detail["date"], avg, color="crimson", lw=2, label="定投平均成本")
-
-    ax1.set_title(f"{fund_name}（{fund_code}）净值走势与定投成本")
-    ax1.legend(fontsize=10, loc="upper left")
-    ax1.grid(True, alpha=0.25)
-    ax1.set_ylabel("净值（元）")
-
-    # --- 子图2: 定投收益率与回撤 ---
-    ax2 = axes[1]
-    if not detail.empty:
-        ret = detail["return_rate"] * 100
-        ax2.plot(detail["date"], ret, color="forestgreen", lw=2, label="定投收益率")
-
-        dd_col = "total_value" if "total_value" in detail.columns else "market_value"
-        roll_max = detail[dd_col].expanding().max()
-        dd = (detail[dd_col] - roll_max) / roll_max * 100
-        ax2.fill_between(detail["date"].values, 0, dd.values, alpha=0.25, color="firebrick", label="回撤", step="pre")
-
-    ax2.axhline(y=0, color="gray", ls="--", lw=0.6)
-    ax2.set_title(f"{fund_name}（{fund_code}）定投收益率与回撤")
-    ax2.legend(fontsize=10, loc="lower left")
-    ax2.grid(True, alpha=0.25)
-    ax2.set_ylabel("收益率（%）")
-    ax2.set_xlabel("日期")
-
-    plt.tight_layout()
+    fig = create_chart(nav_df, detail, fund_code, fund_name)
     path = os.path.join(chart_dir, f"{fund_code}_dca_backtest.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     print(f"图表已保存: {path}")
 
 
@@ -588,18 +558,18 @@ def main() -> None:
 
     # 构造策略对象
     buy_strategy = FixedBuyStrategy(args.amount, args.fee)
-    sell_strategies: list[SellStrategy] = []
+    sell_strategy: SellStrategy | None = None
     if args.take_profit > 0:
-        sell_strategies.append(TargetProfitSellStrategy(args.take_profit))
-    if args.stop_invest > 0 and args.trailing_stop > 0:
-        sell_strategies.append(TrailingStopSellStrategy(args.stop_invest, args.trailing_stop))
-    stop_profit_on = bool(sell_strategies)
+        sell_strategy = TargetProfitSellStrategy(args.take_profit)
+    elif args.stop_invest > 0 and args.trailing_stop > 0:
+        sell_strategy = TrailingStopSellStrategy(args.stop_invest, args.trailing_stop)
+    stop_profit_on = sell_strategy is not None
 
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df,
         invest_dates,
         buy_strategy,
-        sell_strategy=sell_strategies[0] if sell_strategies else None,
+        sell_strategy=sell_strategy,
         tp_cycle=args.tp_cycle,
         dividend_df=dividend_df,
     )
