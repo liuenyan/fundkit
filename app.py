@@ -11,5 +11,5 @@ idx = st.Page("app_pages/index_fund.py", title="指数选基", icon="🎯", url_
 query = st.Page("app_pages/fund_query.py", title="基金查询", icon="🔍", url_path="fund_query")
 pension = st.Page("app_pages/pension_fund.py", title="养老金选基", icon="🏦", url_path="pension")
 
-pg = st.navigation([dca, val, idx, query, pension])
+pg = st.navigation([dca, query, idx, pension, val])
 pg.run()
