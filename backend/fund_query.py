@@ -140,11 +140,22 @@ def sort_result(result: pd.DataFrame, sort_by: str | None) -> pd.DataFrame:
     return result.drop(columns=drop_cols).reset_index(drop=True)
 
 
-TOP_MANAGERS = [
-    "华夏基金", "广发基金", "易方达基金", "富国基金", "南方基金",
-    "汇添富基金", "鹏华基金", "博时基金", "招商基金", "嘉实基金",
-    "华安基金", "天弘基金", "国泰基金", "平安基金", "中欧基金",
-    "工银瑞信基金", "大成基金", "景顺长城基金", "银华基金", "万家基金",
-    "永赢基金", "建信基金", "华泰柏瑞基金", "中银基金", "华宝基金",
-    "交银施罗德基金", "东方红资产管理", "长城基金", "摩根基金(中国)", "兴业基金",
-]
+@st.cache_data(ttl=86400, show_spinner="获取基金管理人排名…")
+def fetch_top_managers(n: int = 30) -> list[str]:
+    """按管理规模（净资产合计）返回 Top N 基金管理人"""
+    db.init_db()
+    with db.engine.connect() as conn:
+        df = pd.read_sql(
+            db.text("""
+                SELECT pf.基金管理人, SUM(COALESCE(scale.净资产规模, 0)) AS total_scale
+                FROM fund_profile pf
+                LEFT JOIN fund_scale scale ON pf.基金代码 = scale.基金代码
+                WHERE pf.基金管理人 IS NOT NULL AND pf.基金管理人 != ''
+                GROUP BY pf.基金管理人
+                ORDER BY total_scale DESC
+                LIMIT :limit
+            """),
+            conn,
+            params={"limit": n},
+        )
+    return df["基金管理人"].tolist()

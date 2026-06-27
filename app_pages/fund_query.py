@@ -11,7 +11,7 @@ from tools.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
 from backend.fund_query import (
     FUND_CATEGORIES,
     SORT_OPTIONS,
-    TOP_MANAGERS,
+    fetch_top_managers,
     load_all_funds,
     query_funds,
 )
@@ -36,7 +36,7 @@ with fcol1:
 with fcol2:
     category = st.selectbox("基金类型", FUND_CATEGORIES)
 with fcol3:
-    manager_options = ["全部"] + TOP_MANAGERS + [CUSTOM_LABEL]
+    manager_options = ["全部"] + fetch_top_managers() + [CUSTOM_LABEL]
     manager_choice = st.selectbox("基金管理人", manager_options, index=0)
 
 manager = None
