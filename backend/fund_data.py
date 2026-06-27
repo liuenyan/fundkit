@@ -34,7 +34,7 @@ def parse_fee_pct(v: Any) -> float | None:
 def _parse_scale(s: Any) -> float | None:
     if not s:
         return None
-    s = str(s).strip()
+    s = str(s).strip().replace(",", "")
     try:
         if "亿" in s:
             m = re.search(r"([\d.]+)\s*亿", s)
