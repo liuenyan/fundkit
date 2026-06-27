@@ -211,6 +211,21 @@ def build_dividend_dict(dividend_df: pd.DataFrame | None) -> dict[pd.Timestamp, 
     return dict(zip(dividend_df["除息日"], dividend_df["每份分红"]))
 
 
+def calc_redeem_fee(
+    fee_batches: list[dict],
+    date: pd.Timestamp,
+    nav: float,
+    redeem_schedule: list[tuple[int, float]] | None = None,
+) -> float:
+    """计算全部申购批次在指定日期的赎回费"""
+    fee = 0.0
+    for b in fee_batches:
+        hold = (date - b["date"]).days
+        rate = get_redeem_rate(hold, redeem_schedule)
+        fee += b["units"] * nav * rate
+    return fee
+
+
 def simulate_dca(
     nav_df: pd.DataFrame,
     invest_dates: pd.DatetimeIndex,
@@ -280,11 +295,7 @@ def simulate_dca(
                 sell_reason = signal.reason
 
         if should_sell:
-            fee = 0.0
-            for b in pos.fee_batches:
-                hold = (date - b["date"]).days
-                rate = get_redeem_rate(hold, redeem_schedule)
-                fee += b["units"] * nav * rate
+            fee = calc_redeem_fee(pos.fee_batches, date, nav, redeem_schedule)
             net = mkt_value - fee
             events.append({
                 "date": date,
@@ -339,10 +350,7 @@ def simulate_dca(
     final_redeem_fee = 0.0
     if pos.units > 0 and pos.fee_batches:
         last_row = detail.iloc[-1]
-        for b in pos.fee_batches:
-            hold = (last_row["date"] - b["date"]).days
-            rate = get_redeem_rate(hold, redeem_schedule)
-            final_redeem_fee += b["units"] * last_row["nav"] * rate
+        final_redeem_fee = calc_redeem_fee(pos.fee_batches, last_row["date"], last_row["nav"], redeem_schedule)
 
     last_market_value = detail.iloc[-1]["market_value"]
     final_value = pos.total_recovered + (last_market_value - final_redeem_fee)
