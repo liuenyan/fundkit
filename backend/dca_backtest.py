@@ -8,7 +8,7 @@ import argparse
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 import matplotlib
 
@@ -26,22 +26,30 @@ from backend.strategy import (
     TrailingStopSellStrategy,
 )
 
-try:
-    import akshare as ak
-except ImportError:
-    print("请先安装依赖: pip install -r requirements.txt")
-    sys.exit(1)
+import akshare as ak
+import db
 
+
+INF = float("inf")
 
 DEFAULT_REDEEM_SCHEDULE = [
     (7, 0.0150),
     (30, 0.0075),
     (365, 0.0050),
     (730, 0.0025),
-    (float("inf"), 0.0),
+    (INF, 0.0),
 ]
 
 WEEKDAY_MAP = {1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI"}
+
+
+class LumpSumResult(TypedDict):
+    amount: float
+    units: float
+    value_before_fee: float
+    redeem_fee: float
+    value_after_fee: float
+    return_rate: float
 
 
 def parse_args() -> argparse.Namespace:
@@ -138,16 +146,11 @@ def fetch_dividend_data(fund_code: str) -> pd.DataFrame:
 
 def fetch_fund_name(fund_code: str) -> str:
     """获取基金简称"""
-    try:
-        import db
-
-        df = db.fund_catalog.load()
-        if df is not None:
-            row = df[df["基金代码"] == fund_code]
-            if not row.empty:
-                return row.iloc[0]["基金简称"]
-    except Exception:
-        pass
+    df = db.fund_catalog.load()
+    if df is not None:
+        row = df[df["基金代码"] == fund_code]
+        if not row.empty:
+            return row.iloc[0]["基金简称"]
     return fund_code
 
 
@@ -167,18 +170,14 @@ def generate_dca_dates(nav_df: pd.DataFrame, freq: str, start_date: str, end_dat
         step = 2 if freq == "biweekly" else 1
         candidates = list(week_dates[::step])
     elif freq == "monthly":
-        cur = start.replace(day=1)
-        while cur <= end:
+        month_starts = pd.date_range(start.replace(day=1), end, freq="MS")
+        for ms in month_starts:
             try:
-                cand = cur.replace(day=min(day, 28))
+                cand = ms.replace(day=min(day, 28))
             except ValueError:
-                cand = cur.replace(day=28)
+                cand = ms.replace(day=28)
             if cand >= start:
                 candidates.append(cand)
-            y = cur.year + (cur.month // 12)
-            m = cur.month % 12 + 1
-            cur = pd.Timestamp(year=y, month=m, day=1)
-        candidates = sorted(set(candidates))
 
     result = []
     for cand in candidates:
@@ -254,11 +253,8 @@ def simulate_dca(
     records: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
 
-    for d in nav_df["date"]:
-        date = pd.Timestamp(d)
-        nav = nav_dict.get(date)
-        if nav is None:
-            continue
+    for date in nav_df["date"]:
+        nav = nav_dict[date]
 
         inv_today = 0.0
         unit_added = 0.0
@@ -321,7 +317,7 @@ def simulate_dca(
             pos.cost = 0.0
             mkt_value = 0.0
             round_return = 0.0
-            pos.peak_return = -float("inf")
+            pos.peak_return = -INF
             pos.fee_batches = []
             pos.is_active = tp_cycle
             sell_strategy.on_reset()
@@ -379,10 +375,9 @@ def max_drawdown(series: pd.Series) -> float:
     return dd.min()
 
 
-def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None, dividend_df: pd.DataFrame | None = None) -> dict[str, Any] | None:
+def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None, dividend_df: pd.DataFrame | None = None) -> LumpSumResult | None:
     """一次性投入收益计算（基于真实分红数据再投资）"""
-    df = nav_df.copy()
-    df = df[df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
+    df = nav_df.loc[nav_df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
     if df.empty:
         return None
 
@@ -431,10 +426,12 @@ def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fun
 
 def print_summary(
     fund_name: str, fund_code: str, start: str, end: str, freq: str, amount: float, fee: float,
-    total_invest: float, portfolio_value: float, redeem_fee: float, final_val: float,
+    detail: pd.DataFrame, redeem_fee: float, final_val: float,
     total_ret: float, ann_ret: float, mdd: float,
-    lumpsum: dict[str, Any] | None,
+    lumpsum: LumpSumResult | None,
 ) -> None:
+    total_invest = detail.iloc[-1]["total_invested"]
+    portfolio_value = detail.iloc[-1]["total_value"]
     sep = "=" * 52
     print(f"""
 {sep}
@@ -485,9 +482,10 @@ def print_events(events: list[dict[str, Any]]) -> None:
     print()
 
 
-def print_detail_table(detail: pd.DataFrame, total_invest: float, final_val: float, total_ret: float, stop_profit_on: bool, events: list[dict[str, Any]]) -> None:
+def print_detail_table(detail: pd.DataFrame, final_val: float, total_ret: float, events: list[dict[str, Any]]) -> None:
     """交易明细表格（支持分红列自动检测）"""
-    if stop_profit_on:
+    total_invest = detail.iloc[-1]["total_invested"]
+    if events:
         event_dates = {e["date"] for e in events}
         display = detail[
             (detail["investment"] > 0) | (detail["dividend_units"] > 0) | detail["date"].isin(event_dates)
@@ -504,7 +502,7 @@ def print_detail_table(detail: pd.DataFrame, total_invest: float, final_val: flo
         widths.insert(4, 8)
         sep_len = 80
 
-    header = " ".join(f"{c:>{w}}" if w == widths[-1] else f"{c:<{w}}" if i == 0 else f"{c:>{w}}" for i, (c, w) in enumerate(zip(cols, widths)))
+    header = " ".join(f"{c:<{w}}" if i == 0 else f"{c:>{w}}" for i, (c, w) in enumerate(zip(cols, widths)))
     print(header)
     print("─" * sep_len)
 
@@ -563,7 +561,6 @@ def main() -> None:
         sell_strategy = TargetProfitSellStrategy(args.take_profit)
     elif args.stop_invest > 0 and args.trailing_stop > 0:
         sell_strategy = TrailingStopSellStrategy(args.stop_invest, args.trailing_stop)
-    stop_profit_on = sell_strategy is not None
 
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df,
@@ -575,7 +572,6 @@ def main() -> None:
     )
 
     total_invest = detail.iloc[-1]["total_invested"]
-    portfolio_value = detail.iloc[-1]["total_value"]
     total_ret = (final_val - total_invest) / total_invest
     ann_ret = calc_annualized(total_ret, pd.Timestamp(args.start), pd.Timestamp(end_date))
     mdd = max_drawdown(detail["total_value"])
@@ -583,9 +579,9 @@ def main() -> None:
     lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
 
     print_summary(fund_name, args.fund, args.start, end_date, args.freq, args.amount, args.fee,
-                  total_invest, portfolio_value, redeem_fee, final_val, total_ret, ann_ret, mdd, lumpsum)
+                  detail, redeem_fee, final_val, total_ret, ann_ret, mdd, lumpsum)
     print_events(events)
-    print_detail_table(detail, total_invest, final_val, total_ret, stop_profit_on, events)
+    print_detail_table(detail, final_val, total_ret, events)
 
     if args.output:
         detail.to_csv(args.output, index=False, encoding="utf-8-sig")

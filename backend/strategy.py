@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+INF = float("inf")
+
 
 @dataclass
 class DCAPosition:
@@ -17,7 +19,7 @@ class DCAPosition:
     total_invested: float = 0.0
     total_recovered: float = 0.0
     is_active: bool = True
-    peak_return: float = -float("inf")
+    peak_return: float = -INF
     fee_batches: list[dict] = field(default_factory=list)
 
 
