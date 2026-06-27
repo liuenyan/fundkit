@@ -42,9 +42,10 @@ main()
 ├─ fetch_fund_name()       # AKShare fund name lookup
 ├─ generate_dca_dates()    # calendar → nearest trading day
 ├─ simulate_dca()          # core backtest loop (uses strategy objects)
-│  ├─ FixedBuyStrategy     # 定期定额买入 (backend/strategy.py)
-│  ├─ TargetProfitSellStrategy  # 目标止盈卖出 (backend/strategy.py)
-│  └─ TrailingStopSellStrategy  # 移动回撤卖出 (backend/strategy.py)
+│  ├─ FixedBuyStrategy           # 定期定额买入 (backend/strategy.py)
+│  ├─ ValueAveragingBuyStrategy  # 价值平均买入 (backend/strategy.py)
+│  ├─ TargetProfitSellStrategy   # 目标止盈卖出 (backend/strategy.py)
+│  └─ TrailingStopSellStrategy   # 移动回撤卖出 (backend/strategy.py)
 ├─ calc_lumpsum()          # lump-sum comparison
 └─ plot_results()          # matplotlib (2-panel chart)
 ```
@@ -68,6 +69,12 @@ main()
 --fund 6位代码  --amount 每期金额  --start YYYY-MM-DD
 --freq daily|weekly|biweekly|monthly  --day 1-28  --weekday 1-5
 --fee 0.0015  --output path.csv  --chart ./charts
+# 买入策略: 定期定额（默认）
+--amount 1000
+
+# 买入策略: 价值平均 (取代 --amount)
+--value-avg 1000 --va-max-multiple 4 --va-min-amount 10
+
 # 策略A: 目标止盈
 --take-profit 0.20 --tp-cycle
 

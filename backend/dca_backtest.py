@@ -24,6 +24,7 @@ from backend.strategy import (
     SellStrategy,
     TargetProfitSellStrategy,
     TrailingStopSellStrategy,
+    ValueAveragingBuyStrategy,
 )
 
 import akshare as ak
@@ -55,7 +56,7 @@ class LumpSumResult(TypedDict):
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="中国开放式基金定投回测工具")
     p.add_argument("--fund", required=True, help="基金代码（6位）")
-    p.add_argument("--amount", type=float, required=True, help="每期定投金额")
+    p.add_argument("--amount", type=float, default=0, help="每期定投金额（--value-avg 启用时忽略）")
     p.add_argument(
         "--freq",
         choices=["daily", "weekly", "biweekly", "monthly"],
@@ -94,6 +95,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--trailing-stop", type=float, default=0, help="【策略B】移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)"
     )
+
+    p.add_argument("--value-avg", type=float, default=0, help="【价值平均】每期市值增长目标 (如 1000 表示每月目标增长 1000 元市值)")
+    p.add_argument("--va-max-multiple", type=float, default=4.0, help="【价值平均】每期最大投入倍数 (默认 4 倍)")
+    p.add_argument("--va-min-amount", type=float, default=10.0, help="【价值平均】最低申购金额 (默认 10 元)")
     return p.parse_args()
 
 
@@ -321,6 +326,7 @@ def simulate_dca(
             pos.fee_batches = []
             pos.is_active = tp_cycle
             sell_strategy.on_reset()
+            buy_strategy.on_reset()
 
         # ── 整体组合指标 ──
         total_value = mkt_value + pos.total_recovered
@@ -555,7 +561,11 @@ def main() -> None:
         sys.exit(1)
 
     # 构造策略对象
-    buy_strategy = FixedBuyStrategy(args.amount, args.fee)
+    if args.value_avg > 0:
+        buy_strategy = ValueAveragingBuyStrategy(
+            args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
+    else:
+        buy_strategy = FixedBuyStrategy(args.amount, args.fee)
     sell_strategy: SellStrategy | None = None
     if args.take_profit > 0:
         sell_strategy = TargetProfitSellStrategy(args.take_profit)

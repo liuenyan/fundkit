@@ -3,6 +3,7 @@
 买入策略 + 卖出策略的接口与内置实现。
 """
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -37,6 +38,10 @@ class BuyStrategy(ABC):
     def should_buy(self, date: pd.Timestamp, nav: float, pos: DCAPosition,
                    invest_set: set[pd.Timestamp]) -> BuyAction: ...
 
+    def on_reset(self) -> None:
+        """卖出后重置策略内部状态（默认无操作）"""
+        return
+
 
 class FixedBuyStrategy(BuyStrategy):
     """定期定额买入"""
@@ -50,6 +55,38 @@ class FixedBuyStrategy(BuyStrategy):
         if pos.is_active and date in invest_set:
             return BuyAction(amount=self.amount, fee_rate=self.purchase_rate)
         return BuyAction(0)
+
+
+class ValueAveragingBuyStrategy(BuyStrategy):
+    """价值平均：以每期增长固定市值为目标"""
+
+    def __init__(self, target_value_increment: float, max_multiple: float = 4.0,
+                 min_amount: float = 10.0, purchase_rate: float = 0.0015) -> None:
+        self.target = target_value_increment
+        self.max_amount = target_value_increment * max_multiple
+        self.min_amount = min_amount
+        self.purchase_rate = purchase_rate
+        self.period_count = 0
+
+    def should_buy(self, date: pd.Timestamp, nav: float, pos: DCAPosition,
+                   invest_set: set[pd.Timestamp]) -> BuyAction:
+        if not pos.is_active or date not in invest_set:
+            return BuyAction(0)
+
+        self.period_count += 1
+        target_value = self.period_count * self.target
+        current_value = pos.units * nav
+        required = target_value - current_value
+
+        if required <= 0:
+            return BuyAction(amount=self.min_amount, fee_rate=self.purchase_rate)
+
+        amount = min(required, self.max_amount)
+        amount = math.ceil(amount * 100) / 100
+        return BuyAction(amount=amount, fee_rate=self.purchase_rate)
+
+    def on_reset(self) -> None:
+        self.period_count = 0
 
 
 @dataclass

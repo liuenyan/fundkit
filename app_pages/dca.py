@@ -27,7 +27,7 @@ from backend.dca_backtest import (
     calc_annualized,
     max_drawdown,
 )
-from backend.strategy import FixedBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy
+from backend.strategy import FixedBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 
@@ -62,7 +62,27 @@ with st.sidebar:
     if "fund" in params:
         del params["fund"]
     fund_code = st.text_input("基金代码（6位）", default_code, key="fund_code_input", help="例：163415 = 兴全商业模式")
-    amount = st.number_input("每期定投金额（元）", 1.0, 1e8, 1000.0, step=100.0)
+
+    buy_type = st.selectbox(
+        "买入策略",
+        ["定期定额", "价值平均"],
+        format_func=lambda x: {"定期定额": "定期定额（每期固定金额）", "价值平均": "价值平均（每期增长固定市值）"}[x],
+    )
+
+    amount = 1000.0
+    va_target = 1000.0
+    va_max_multiple = 4.0
+    va_min_amount = 10.0
+
+    if buy_type == "定期定额":
+        amount = st.number_input("每期定投金额（元）", 1.0, 1e8, 1000.0, step=100.0)
+    else:
+        va_target = st.number_input("每期市值增长目标（元）", 1.0, 1e8, 1000.0, step=100.0)
+        c1, c2 = st.columns(2)
+        with c1:
+            va_max_multiple = st.number_input("最大投入倍数", 1.0, 100.0, 4.0, 0.5)
+        with c2:
+            va_min_amount = st.number_input("最低申购金额（元）", 1.0, 1000.0, 10.0, 5.0)
 
     freq = st.selectbox(
         "定投频率",
@@ -148,10 +168,15 @@ with st.spinner("正在获取数据并计算…"):
     elif strategy == "策略B: 停投持有+移动止盈":
         sell_strategy = TrailingStopSellStrategy(stop_invest / 100, trailing_stop / 100)
 
+    if buy_type == "价值平均":
+        buy_strategy = ValueAveragingBuyStrategy(va_target, va_max_multiple, va_min_amount, fee / 100)
+    else:
+        buy_strategy = FixedBuyStrategy(amount, fee / 100)
+
     detail, events, redeem_fee, final_val = simulate_dca(
         nav_df,
         invest_dates,
-        FixedBuyStrategy(amount, fee / 100),
+        buy_strategy,
         sell_strategy=sell_strategy,
         tp_cycle=tp_cycle,
         dividend_df=dividend_df,
