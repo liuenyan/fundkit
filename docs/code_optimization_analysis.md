@@ -39,11 +39,11 @@ for _, row in df.iterrows():
 
 **修复**: 改为构建 `data` list 后单次 `conn.execute(data)` 批量写入。
 
-### 5. `collect_fund_data.py:229-257` — 两处逐行 `iterrows()` + `list.append()`
+### 5. `collect_fund_data.py:229-257` — 两处逐行 `iterrows()` + `list.append()` ✅
 
 `open_df.iterrows()` 和 `etf_df.iterrows()` 逐行构建 `rows` 列表（`~25000` 只基金），Python 级循环性能差。
 
-**建议**: 用 pandas vectorized 操作替代（如 `df.assign()` + 批量列操作）。
+**修复**: 三个循环全部替换为 `_build_nav_part()` 向量化构造 DataFrame，最终 `pd.concat()`。旧 scalar 函数 `_parse_daily_pct`/`_to_float` 替换为 series 版。ETF 源跳过差集（与 open 无交集），FOF 源保留差集去重。性能约 450ms → 40ms。
 
 ### 6. `dca_backtest.py:108-110` — 连续两次 AKShare API 调用获取净值 ✅
 
@@ -148,7 +148,7 @@ nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
 |--------|----------|------|
 | P0 | #1, #2 | 数据正确性 / 功能可用性 |
 | P0 ~~#3~~ | ~~估值数据准确性~~ | ✅ 已完成 |
-| P1 | ~~#4~~, #5, ~~#6~~ | 性能瓶颈 |
+| P1 | ~~#4~~, ~~#5~~, ~~#6~~ | 性能瓶颈 |
 | P1 | ~~#10~~ | 启动效率 |
 | P2 | ~~#7~~, #8, #9, #12 | 可维护性 |
 | P3 | #11, #13, #14, #15 | 未来优化 |

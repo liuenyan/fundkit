@@ -24,7 +24,6 @@ import time
 import akshare as ak
 import pandas as pd
 
-from typing import Any
 
 import db
 from backend.fund_data import batch_fetch_overview, fetch_purchase_data, save_overview_result
@@ -157,15 +156,33 @@ def collect_tracking_method() -> None:
     print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
 
 
-def _parse_daily_pct(v: Any) -> float | None:  # noqa: ANN401
-    """归一化日增长率：'7.36' → 7.36, '0.05%' → 0.05, NaN → None"""
-    if pd.isna(v) or v is None or str(v).strip() in ("", "—", "---"):
-        return None
-    s = str(v).strip().replace("%", "").replace(" ", "")
-    try:
-        return float(s)
-    except (ValueError, TypeError):
-        return None
+def _parse_daily_pct_series(s: pd.Series) -> pd.Series:
+    """向量化：归一化日增长率"""
+    s = s.astype(str).str.strip()
+    s = s.replace(["", "nan", "<NA>", "None", "—", "---"], None)
+    s = s.str.replace("%", "", regex=False).str.replace(" ", "", regex=False)
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _to_float_series(s: pd.Series) -> pd.Series:
+    """向量化：转浮点"""
+    s = s.astype(str).str.strip()
+    s = s.replace(["", "nan", "<NA>", "None"], None)
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _build_nav_part(*, df: pd.DataFrame, date_val: str, nav_col: str, cum_col: str,
+                    growth_col: str, source: str, ts: float) -> pd.DataFrame:
+    """向量化构建净值记录 DataFrame"""
+    return pd.DataFrame({
+        "基金代码": df["基金代码"].astype(str),
+        "日期": date_val,
+        "单位净值": _to_float_series(df[nav_col]),
+        "累计净值": _to_float_series(df[cum_col]),
+        "日增长率": _parse_daily_pct_series(df[growth_col]),
+        "数据来源": source,
+        "updated_at": ts,
+    })
 
 
 def _extract_date_from_columns(cols: pd.Index) -> tuple[str | None, str | None, str | None]:
@@ -198,15 +215,7 @@ def collect_fund_nav(force: bool = False) -> None:
         print("净值缓存有效（24h内），跳过。使用 --force 强制重采。")
         return
 
-    def _to_float(v: Any) -> float | None:  # noqa: ANN401
-        if pd.isna(v) or v is None or str(v).strip() == "":
-            return None
-        try:
-            return float(v)
-        except (ValueError, TypeError):
-            return None
-
-    rows = []
+    nav_parts: list[pd.DataFrame] = []
     ts = time.time()
 
     # ── Source 1: fund_open_fund_daily_em ──
@@ -221,63 +230,41 @@ def collect_fund_nav(force: bool = False) -> None:
         date_str, nav_col, cum_col = _extract_date_from_columns(open_df.columns)
         if date_str is None:
             print("  ! 无法从列名解析日期，跳过")
+        elif "日增长率" not in open_df.columns:
+            print("  ! 缺少 日增长率 列，跳过")
         else:
-            growth_col = "日增长率"
-            if growth_col not in open_df.columns:
-                print(f"  ! 缺少 {growth_col} 列，跳过")
-            else:
-                for _, r in open_df.iterrows():
-                    rows.append(
-                        {
-                            "基金代码": str(r["基金代码"]),
-                            "日期": date_str,
-                            "单位净值": _to_float(r.get(nav_col)),
-                            "累计净值": _to_float(r.get(cum_col)),
-                            "日增长率": _parse_daily_pct(r.get(growth_col)),
-                            "数据来源": "open",
-                            "updated_at": ts,
-                        }
-                    )
-                print(f"  → 已解析 {len(rows)} 只开放基金（{date_str}）")
+            part = _build_nav_part(
+                df=open_df, date_val=date_str,
+                nav_col=nav_col, cum_col=cum_col, growth_col="日增长率",
+                source="open", ts=ts,
+            )
+            nav_parts.append(part)
+            print(f"  → 已解析 {len(part)} 只开放基金（{date_str}）")
 
-    # ── Source 2: fund_etf_fund_daily_em（补 ETF，覆盖新代码） ──
-    print("Step 2/2 — 获取 ETF 净值（fund_etf_fund_daily_em）…")
+    # ── Source 2: fund_etf_fund_daily_em（补 ETF，与 open 无交集） ──
+    print("Step 2/3 — 获取 ETF 净值（fund_etf_fund_daily_em）…")
     try:
         etf_df = ak.fund_etf_fund_daily_em()
     except Exception as e:
         print(f"  fund_etf_fund_daily_em 调用失败: {e}")
         etf_df = pd.DataFrame()
 
-    existing_codes = {r["基金代码"] for r in rows}
-    etf_added = 0
     if not etf_df.empty:
         date_str2, nav_col2, cum_col2 = _extract_date_from_columns(etf_df.columns)
         if date_str2 is None:
             print("  ! 无法从 ETF 列名解析日期，跳过")
+        elif "增长率" not in etf_df.columns:
+            print("  ! 缺少 增长率 列，跳过")
         else:
-            growth_col2 = "增长率"
-            if growth_col2 not in etf_df.columns:
-                print(f"  ! 缺少 {growth_col2} 列，跳过")
-            else:
-                for _, r in etf_df.iterrows():
-                    code = str(r["基金代码"])
-                    if code in existing_codes:
-                        continue
-                    rows.append(
-                        {
-                            "基金代码": code,
-                            "日期": date_str2,
-                            "单位净值": _to_float(r.get(nav_col2)),
-                            "累计净值": _to_float(r.get(cum_col2)),
-                            "日增长率": _parse_daily_pct(r.get(growth_col2)),
-                            "数据来源": "etf",
-                            "updated_at": ts,
-                        }
-                    )
-                    etf_added += 1
-                print(f"  → 新增 {etf_added} 只 ETF（{date_str2}）")
+            part = _build_nav_part(
+                df=etf_df, date_val=date_str2,
+                nav_col=nav_col2, cum_col=cum_col2, growth_col="增长率",
+                source="etf", ts=ts,
+            )
+            nav_parts.append(part)
+            print(f"  → 已解析 {len(part)} 只 ETF（{date_str2}）")
 
-    # ── Source 3: fund_open_fund_rank_em(FOF)（补 FOF，覆盖 FOF Y 份额） ──
+    # ── Source 3: fund_open_fund_rank_em(FOF)，与 open 有重叠，需差集去重 ──
     print("Step 3/3 — 获取 FOF 净值（fund_open_fund_rank_em）…")
     try:
         fof_df = ak.fund_open_fund_rank_em(symbol="FOF")
@@ -285,33 +272,24 @@ def collect_fund_nav(force: bool = False) -> None:
         print(f"  fund_open_fund_rank_em 调用失败: {e}")
         fof_df = pd.DataFrame()
 
-    existing_codes = {r["基金代码"] for r in rows}
-    fof_added = 0
     if not fof_df.empty:
-        for _, r in fof_df.iterrows():
-            code = str(r["基金代码"])
-            if code in existing_codes:
-                continue
-            rows.append(
-                {
-                    "基金代码": code,
-                    "日期": str(r.get("日期", "")),
-                    "单位净值": _to_float(r.get("单位净值")),
-                    "累计净值": _to_float(r.get("累计净值")),
-                    "日增长率": _parse_daily_pct(r.get("日增长率")),
-                    "数据来源": "fof",
-                    "updated_at": ts,
-                }
+        existing = set().union(*(p["基金代码"] for p in nav_parts))
+        new = fof_df[~fof_df["基金代码"].astype(str).isin(existing)]
+        if not new.empty:
+            part = _build_nav_part(
+                df=new, date_val=str(new.iloc[0]["日期"]),
+                nav_col="单位净值", cum_col="累计净值", growth_col="日增长率",
+                source="fof", ts=ts,
             )
-            fof_added += 1
-        print(f"  → 新增 {fof_added} 只 FOF（{fof_df.iloc[0].get('日期', '')}）")
+            nav_parts.append(part)
+            print(f"  → 新增 {len(part)} 只 FOF（{new.iloc[0]['日期']}）")
 
     # ── 写入 DB ──
-    if not rows:
+    if not nav_parts:
         print("未采集到任何数据，跳过写入")
         return
 
-    nav_df = pd.DataFrame(rows)
+    nav_df = pd.concat(nav_parts, ignore_index=True)
     print(f"\n写入 {len(nav_df)} 条记录到 fund_nav 表…")
     db.fund_nav.save(nav_df)
     print("写入完成。")
