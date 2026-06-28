@@ -13,6 +13,7 @@ import pandas as pd
 import akshare as ak
 
 import db
+from tools.stats import calc_percentile
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -79,13 +80,6 @@ CONFIG = [
 ]
 
 VALUATION_BANDS = [(0, 30, "低估"), (30, 70, "适中"), (70, 100, "高估")]
-
-
-def calc_percentile(series: pd.Series) -> float | None:
-    s = series.dropna()
-    if len(s) < 2:
-        return None
-    return float((s < s.iloc[-1]).mean() * 100)
 
 
 def get_label(pct: float | None) -> str:

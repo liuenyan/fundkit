@@ -21,10 +21,9 @@ from backend.dca_backtest import (
     generate_dca_dates,
     simulate_dca as _simulate_dca,
     calc_lumpsum,
-    calc_annualized,
-    max_drawdown,
 )
 from backend.strategy import FixedBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
+from tools.stats import calc_annualized, max_drawdown
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 

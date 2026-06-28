@@ -18,6 +18,7 @@ import pandas as pd
 
 from backend.charting import create_chart
 from backend.em_fetcher import fetch_nav_data
+from tools.stats import calc_annualized, max_drawdown
 from backend.strategy import (
     BuyStrategy,
     DCAPosition,
@@ -362,19 +363,6 @@ def simulate_dca(
     last_market_value = detail.iloc[-1]["market_value"]
     final_value = pos.total_recovered + (last_market_value - final_redeem_fee)
     return detail, events, final_redeem_fee, final_value
-
-
-def calc_annualized(ret: float, start: pd.Timestamp, end: pd.Timestamp) -> float:
-    days = (end - start).days
-    if days <= 0:
-        return 0.0
-    return (1 + ret) ** (365 / days) - 1
-
-
-def max_drawdown(series: pd.Series) -> float:
-    peak = series.expanding().max()
-    dd = (series - peak) / peak
-    return dd.min()
 
 
 def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None, dividend_df: pd.DataFrame | None = None) -> LumpSumResult | None:
