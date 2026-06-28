@@ -3,11 +3,7 @@
 定投回测页面
 """
 
-import io
-import contextlib
 from datetime import datetime
-from collections.abc import Callable
-from typing import Any
 
 import streamlit as st
 import pandas as pd
@@ -15,35 +11,18 @@ from matplotlib.figure import Figure
 
 from backend.charting import create_chart
 from backend.dca_backtest import (
+    BacktestError,
     fetch_dividend_data,
-    fetch_fund_data as _fetch_fund_data,
+    fetch_fund_data,
     fetch_fund_name,
     generate_dca_dates,
-    simulate_dca as _simulate_dca,
+    simulate_dca,
     calc_lumpsum,
 )
 from backend.strategy import FixedBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
 from tools.stats import calc_annualized, max_drawdown
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
-
-
-def safe_call(func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        try:
-            return func(*args, **kwargs)
-        except SystemExit:
-            st.error(buf.getvalue())
-            st.stop()
-
-
-def fetch_fund_data(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-    return safe_call(_fetch_fund_data, *args, **kwargs)
-
-
-def simulate_dca(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-    return safe_call(_simulate_dca, *args, **kwargs)
 
 
 def make_charts(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str) -> Figure:
@@ -149,7 +128,12 @@ with st.spinner("正在获取数据并计算…"):
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
-    nav_df = fetch_fund_data(fund_code, start_str, end_str)
+    try:
+        nav_df = fetch_fund_data(fund_code, start_str, end_str)
+    except BacktestError as e:
+        st.error(str(e))
+        st.stop()
+
     fund_name = fetch_fund_name(fund_code)
     dividend_df = fetch_dividend_data(fund_code)
 
@@ -169,14 +153,18 @@ with st.spinner("正在获取数据并计算…"):
     else:
         buy_strategy = FixedBuyStrategy(amount, fee / 100)
 
-    detail, events, redeem_fee, final_val = simulate_dca(
-        nav_df,
-        invest_dates,
-        buy_strategy,
-        sell_strategy=sell_strategy,
-        tp_cycle=tp_cycle,
-        dividend_df=dividend_df,
-    )
+    try:
+        detail, events, redeem_fee, final_val = simulate_dca(
+            nav_df,
+            invest_dates,
+            buy_strategy,
+            sell_strategy=sell_strategy,
+            tp_cycle=tp_cycle,
+            dividend_df=dividend_df,
+        )
+    except BacktestError as e:
+        st.error(str(e))
+        st.stop()
 
     total_invest = detail.iloc[-1]["total_invested"]
     portfolio_value = detail.iloc[-1]["total_value"]

@@ -5,7 +5,7 @@ SQLite 数据库管理（SQLAlchemy Core）
 
 import os
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -124,6 +124,18 @@ fund_nav = Table(
     Column("日增长率", Float),
     Column("数据来源", String),
     Column("updated_at", Float),
+)
+
+fund_nav_history = Table(
+    "fund_nav_history",
+    metadata,
+    Column("基金代码", String, nullable=False),
+    Column("日期", String, nullable=False),
+    Column("单位净值", Float),
+    Column("累计净值", Float),
+    Column("日增长率", Float),
+    Column("updated_at", Float),
+    PrimaryKeyConstraint("基金代码", "日期"),
 )
 
 CATALOG_TTL = 86400  # 基金名录默认 TTL
@@ -312,12 +324,97 @@ class FundCatalogTable(_BulkTable):
     default_ttl = CATALOG_TTL
 
 
+def _last_available_data_day(end_date: str, now: datetime | None = None) -> str:
+    """返回 end_date 当天已知的最新有净值数据的交易日。
+
+    规则：
+      1. 周末 → 本周五
+      2. 今天且未到 22:00 → 上一个交易日
+      3. 其他情况 → end_date 本身
+    """
+    if now is None:
+        now = datetime.now()
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    # 周末 → 本周五
+    if end.weekday() >= 5:
+        days_after_friday = end.weekday() - 4
+        return (end - timedelta(days=days_after_friday)).strftime("%Y-%m-%d")
+
+    # 今天且未到 22:00 → 上一个交易日
+    if end.date() == now.date() and now.hour < 22:
+        prev = end - timedelta(days=1)
+        while prev.weekday() >= 5:
+            prev -= timedelta(days=1)
+        return prev.strftime("%Y-%m-%d")
+
+    return end_date
+
+
+class FundNavHistoryTable:
+    """历史净值缓存表——每个基金独立的一整段历史 OR REPLACE 积累"""
+
+    table = fund_nav_history
+
+    def is_cached(self, fund_code: str, end_date: str, _now: datetime | None = None) -> bool:
+        """检查本地缓存是否覆盖 end_date 已知的最新交易日"""
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT MAX(日期) FROM fund_nav_history WHERE 基金代码=:code"),
+                    {"code": fund_code},
+                ).fetchone()
+                if row is None or row[0] is None:
+                    return False
+                expected = _last_available_data_day(end_date, now=_now)
+                return row[0] >= expected
+        except Exception:
+            return False
+
+    def load(self, fund_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
+        """读取缓存中指定日期范围的净值数据"""
+        try:
+            df = pd.read_sql_query(
+                "SELECT 日期, 单位净值, 累计净值, 日增长率 FROM fund_nav_history "
+                "WHERE 基金代码=? AND 日期 BETWEEN ? AND ? ORDER BY 日期",
+                engine,
+                params=(fund_code, start_date, end_date),
+            )
+            if df.empty:
+                return None
+            df = df.rename(columns={"日期": "净值日期"})
+            return df
+        except Exception:
+            return None
+
+    def save(self, fund_code: str, df: pd.DataFrame) -> None:
+        """保存全量历史净值到缓存（OR REPLACE）"""
+        with engine.begin() as conn:
+            data = [
+                {
+                    "基金代码": fund_code,
+                    "日期": str(row["净值日期"]),
+                    "单位净值": float(row["单位净值"]),
+                    "累计净值": float(row["累计净值"]),
+                    "日增长率": float(row["日增长率"]) if pd.notna(row["日增长率"]) else None,
+                    "updated_at": time.time(),
+                }
+                for _, row in df.iterrows()
+            ]
+            if data:
+                conn.execute(
+                    self.table.insert().prefix_with("OR REPLACE"),
+                    data,
+                )
+
+
 # ── 单例实例 ──
 fund_fee = FundFeeTable()
 fund_scale = FundScaleTable()
 fund_profile = FundProfileTable()
 fund_nav = FundNavTable()
 fund_catalog = FundCatalogTable()
+fund_nav_history = FundNavHistoryTable()
 
 
 # ── 初始化 ──

@@ -33,6 +33,10 @@ import akshare as ak
 import db
 
 
+class BacktestError(Exception):
+    """定投回测过程中的错误"""
+
+
 INF = float("inf")
 
 DEFAULT_REDEEM_SCHEDULE = [
@@ -105,17 +109,32 @@ def parse_args() -> argparse.Namespace:
 
 
 def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-    """获取基金历史净值数据（单位净值 + 累计净值）"""
+    """获取基金历史净值数据（单位净值 + 累计净值），优先从本地缓存读取"""
+    db.init_db()
+    # 检查本地缓存是否覆盖到 end_date
+    if db.fund_nav_history.is_cached(fund_code, end_date):
+        cached = db.fund_nav_history.load(fund_code, start_date, end_date)
+        if cached is not None and not cached.empty:
+            print(f"从本地缓存读取 {len(cached)} 条净值记录")
+            df = cached
+            df["date"] = pd.to_datetime(df["净值日期"])
+            df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
+            df["acc_nav"] = pd.to_numeric(df["累计净值"], errors="coerce")
+            df["daily_return"] = pd.to_numeric(df["日增长率"], errors="coerce")
+            return df
+
+    # 缓存不足 → 从天天基金网获取全量历史
     print(f"获取基金 {fund_code} 历史净值数据 ...")
     try:
         df = fetch_nav_data(fund_code)
     except Exception as e:
-        print(f"获取数据失败: {e}")
-        sys.exit(1)
+        raise BacktestError(f"获取数据失败: {e}")
 
     if df.empty:
-        print("未获取到数据，请检查基金代码是否正确")
-        sys.exit(1)
+        raise BacktestError("未获取到数据，请检查基金代码是否正确")
+
+    # 保存全量数据到缓存
+    db.fund_nav_history.save(fund_code, df)
 
     df["date"] = pd.to_datetime(df["净值日期"])
     df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
@@ -126,8 +145,7 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
     df = df[mask].reset_index(drop=True)
 
     if df.empty:
-        print(f"错误：{start_date} ~ {end_date} 范围内无数据")
-        sys.exit(1)
+        raise BacktestError(f"{start_date} ~ {end_date} 范围内无数据")
 
     print(f"获取到 {len(df)} 条净值记录")
     return df
@@ -355,8 +373,7 @@ def simulate_dca(
 
     detail = pd.DataFrame(records)
     if detail.empty:
-        print("错误：未生成有效的定投记录")
-        sys.exit(1)
+        raise BacktestError("未生成有效的定投记录")
 
     # ── 期末赎回费 ──
     final_redeem_fee = 0.0
@@ -537,55 +554,58 @@ def main() -> None:
     args = parse_args()
     end_date = args.end or datetime.today().strftime("%Y-%m-%d")
 
-    nav_df = fetch_fund_data(args.fund, args.start, end_date)
-    fund_name = fetch_fund_name(args.fund)
-    dividend_df = fetch_dividend_data(args.fund)
+    try:
+        nav_df = fetch_fund_data(args.fund, args.start, end_date)
+        fund_name = fetch_fund_name(args.fund)
+        dividend_df = fetch_dividend_data(args.fund)
 
-    invest_dates = generate_dca_dates(nav_df, args.freq, args.start, end_date, args.day, args.weekday)
-    print(f"定投日期: {len(invest_dates)} 期")
+        invest_dates = generate_dca_dates(nav_df, args.freq, args.start, end_date, args.day, args.weekday)
+        print(f"定投日期: {len(invest_dates)} 期")
 
-    if invest_dates.empty:
-        print("错误：未能生成有效的定投日期")
+        if invest_dates.empty:
+            raise BacktestError("未能生成有效的定投日期")
+
+        # 构造策略对象
+        if args.value_avg > 0:
+            buy_strategy = ValueAveragingBuyStrategy(
+                args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
+        else:
+            buy_strategy = FixedBuyStrategy(args.amount, args.fee)
+        sell_strategy: SellStrategy | None = None
+        if args.take_profit > 0:
+            sell_strategy = TargetProfitSellStrategy(args.take_profit)
+        elif args.stop_invest > 0 and args.trailing_stop > 0:
+            sell_strategy = TrailingStopSellStrategy(args.stop_invest, args.trailing_stop)
+
+        detail, events, redeem_fee, final_val = simulate_dca(
+            nav_df,
+            invest_dates,
+            buy_strategy,
+            sell_strategy=sell_strategy,
+            tp_cycle=args.tp_cycle,
+            dividend_df=dividend_df,
+        )
+
+        total_invest = detail.iloc[-1]["total_invested"]
+        total_ret = (final_val - total_invest) / total_invest
+        ann_ret = calc_annualized(total_ret, pd.Timestamp(args.start), pd.Timestamp(end_date))
+        mdd = max_drawdown(detail["total_value"])
+
+        lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
+
+        print_summary(fund_name, args.fund, args.start, end_date, args.freq, args.amount, args.fee,
+                      detail, redeem_fee, final_val, total_ret, ann_ret, mdd, lumpsum)
+        print_events(events)
+        print_detail_table(detail, final_val, total_ret, events)
+
+        if args.output:
+            detail.to_csv(args.output, index=False, encoding="utf-8-sig")
+            print(f"\n明细已导出: {args.output}")
+
+        plot_results(nav_df, detail, args.fund, fund_name, args.start, end_date, args.chart)
+    except BacktestError as e:
+        print(e)
         sys.exit(1)
-
-    # 构造策略对象
-    if args.value_avg > 0:
-        buy_strategy = ValueAveragingBuyStrategy(
-            args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
-    else:
-        buy_strategy = FixedBuyStrategy(args.amount, args.fee)
-    sell_strategy: SellStrategy | None = None
-    if args.take_profit > 0:
-        sell_strategy = TargetProfitSellStrategy(args.take_profit)
-    elif args.stop_invest > 0 and args.trailing_stop > 0:
-        sell_strategy = TrailingStopSellStrategy(args.stop_invest, args.trailing_stop)
-
-    detail, events, redeem_fee, final_val = simulate_dca(
-        nav_df,
-        invest_dates,
-        buy_strategy,
-        sell_strategy=sell_strategy,
-        tp_cycle=args.tp_cycle,
-        dividend_df=dividend_df,
-    )
-
-    total_invest = detail.iloc[-1]["total_invested"]
-    total_ret = (final_val - total_invest) / total_invest
-    ann_ret = calc_annualized(total_ret, pd.Timestamp(args.start), pd.Timestamp(end_date))
-    mdd = max_drawdown(detail["total_value"])
-
-    lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
-
-    print_summary(fund_name, args.fund, args.start, end_date, args.freq, args.amount, args.fee,
-                  detail, redeem_fee, final_val, total_ret, ann_ret, mdd, lumpsum)
-    print_events(events)
-    print_detail_table(detail, final_val, total_ret, events)
-
-    if args.output:
-        detail.to_csv(args.output, index=False, encoding="utf-8-sig")
-        print(f"\n明细已导出: {args.output}")
-
-    plot_results(nav_df, detail, args.fund, fund_name, args.start, end_date, args.chart)
 
 
 if __name__ == "__main__":
