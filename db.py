@@ -320,10 +320,16 @@ fund_catalog = FundCatalogTable()
 
 # ── 初始化 ──
 
+_DB_INITIALIZED = False
+
 
 def init_db() -> None:
+    global _DB_INITIALIZED
+    if _DB_INITIALIZED:
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     metadata.create_all(engine)
+    _DB_INITIALIZED = True
 
 
 # ── 估值序列缓存 ──
