@@ -339,11 +339,14 @@ def load_series(name: str, metric: str) -> pd.DataFrame:
 
 def upsert_series(name: str, metric: str, df: pd.DataFrame) -> None:
     with engine.begin() as conn:
-        for _, row in df.iterrows():
-            conn.execute(
-                index_series.insert().prefix_with("OR IGNORE"),
-                {"name": name, "metric": metric, "date": str(row["date"]), "value": float(row["value"])},
-            )
+        data = [
+            {"name": name, "metric": metric, "date": str(row["date"]), "value": float(row["value"])}
+            for _, row in df.iterrows()
+        ]
+        conn.execute(
+            index_series.insert().prefix_with("OR REPLACE"),
+            data,
+        )
 
 
 def get_series_last_date(name: str, metric: str) -> str | None:
