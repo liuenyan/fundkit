@@ -134,11 +134,13 @@ nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
 
 可直接用 `nav_df.set_index("date")["unit_nav"].to_dict()`。
 
-### 15. `collect_fund_data.py:68-75` — 多线程闭包无锁
+### 15. `collect_fund_data.py:68-75` — 多线程闭包无锁 ✅
 
-`_persist()` 闭包中 `nonlocal success, failed` 的递增操作在 `ThreadPoolExecutor` 中未加锁。虽 CPython GIL 保护了整数赋值，但语义不清晰。
+`_persist()` 闭包中 `nonlocal success, failed` 的递增操作在 `ThreadPoolExecutor` 中未加锁。
 
-**建议**: 使用 `threading.Lock` 包装，或改用 `queue.Queue` 收集结果。
+**分析**: `on_result` 回调实际在主线程串行执行（`as_completed` 迭代器在主线程 yield），无竞态。
+
+**处理**: 加注释说明 `on_result` 在主线程串行执行，无需锁。
 
 ---
 
@@ -151,4 +153,4 @@ nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
 | P1 | ~~#4~~, ~~#5~~, ~~#6~~ | 性能瓶颈 |
 | P1 | ~~#10~~ | 启动效率 |
 | P2 | ~~#7~~, ~~#8~~, #9, #12 | 可维护性 |
-| P3 | #11, ~~#13~~, ~~#14~~, #15 | 未来优化 |
+| P3 | #11, ~~#13~~, ~~#14~~, ~~#15~~ | 未来优化 |

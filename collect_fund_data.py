@@ -65,7 +65,7 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
     load_cached = db.fund_fee.load(all_codes)
 
     def _persist(code: str, result: dict | None) -> None:
-        nonlocal success, failed
+        nonlocal success, failed  # on_result 在主线程串行执行，无需锁
         if result is None:
             failed += 1
             return
