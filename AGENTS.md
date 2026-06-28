@@ -103,6 +103,27 @@ main()
 - The simulated return rate (`round_return`) can exceed the `--take-profit` / `--stop-invest` target if NAV gaps significantly between trading days (especially for volatile commodity/oil funds like 110026). This is mathematically correct — DCA buys more shares at low prices, amplifying returns on recovery.
 - For monthly frequency: `day` is clamped to 28 (funds always have NAV on those days or before). For Chinese funds, day 28+ is safer than day 30/31.
 
+## Compare tool
+
+```bash
+# 手动指定场景
+./venv/bin/python -m tools.compare_strategies \
+  --funds 110026,110020,160119 \
+  --scenarios "熊市底部:2019-01-10,市场平均:2020-04-10,牛市顶部:2021-07-09" \
+  --output docs/strategy_comparison.md
+
+# 自动识别场景（基于净值历史找最高/最低/中位数）
+./venv/bin/python -m tools.find_scenarios --fund 110026 \
+  --scenarios "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"
+# 输出: 牛市顶部:2021-08-04,熊市底部:2018-10-18,市场平均:2020-09-28
+
+# 组合使用：自动场景 + 对比
+./venv/bin/python -m tools.compare_strategies \
+  --funds 110026 \
+  --auto-scenarios 110026 \
+  --scenarios-spec "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"
+```
+
 ## Git rules
 
 - 每次编写完新代码后，不提交到 git 仓库，待用户发出指令再提交。

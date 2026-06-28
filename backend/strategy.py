@@ -43,6 +43,46 @@ class BuyStrategy(ABC):
         return
 
 
+class MovingAverageBuyStrategy(BuyStrategy):
+    """指数均线策略：偏离均线越远买入越多"""
+
+    # 默认偏差阈值 → 买入倍数（5 档）
+    DEFAULT_TIERS = (-0.10, -0.05, 0, 0.05)
+    DEFAULT_MULTIPLIERS = (2.0, 1.5, 1.0, 0.5, 0.0)
+
+    def __init__(self, base_amount: float, period: int, purchase_rate: float,
+                 nav_df: pd.DataFrame, tiers: tuple[float, ...] | None = None,
+                 multipliers: tuple[float, ...] | None = None) -> None:
+        self.base_amount = base_amount
+        self.period = period
+        self.purchase_rate = purchase_rate
+        self.tiers = tiers or self.DEFAULT_TIERS
+        self.multipliers = multipliers or self.DEFAULT_MULTIPLIERS
+        # 用 date 作为 index，确保 should_buy 能按日期查找
+        nav_series = nav_df.set_index("date")["unit_nav"]
+        self.ma_series = nav_series.rolling(window=period, min_periods=period).mean()
+
+    def should_buy(self, date: pd.Timestamp, nav: float, pos: DCAPosition,
+                   invest_set: set[pd.Timestamp]) -> BuyAction:
+        if not pos.is_active or date not in invest_set:
+            return BuyAction(0)
+
+        ma = self.ma_series.get(date, None)
+        if ma is None or pd.isna(ma) or ma == 0:
+            return BuyAction(amount=self.base_amount, fee_rate=self.purchase_rate)
+
+        deviation = (nav - ma) / ma
+        multiple = self._deviation_to_multiple(deviation)
+        amount = self.base_amount * multiple
+        return BuyAction(amount=max(amount, 0) if amount > 0 else 0, fee_rate=self.purchase_rate)
+
+    def _deviation_to_multiple(self, deviation: float) -> float:
+        for i, threshold in enumerate(self.tiers):
+            if deviation < threshold:
+                return self.multipliers[i]
+        return self.multipliers[-1]
+
+
 class FixedBuyStrategy(BuyStrategy):
     """定期定额买入"""
 

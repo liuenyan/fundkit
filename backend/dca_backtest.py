@@ -23,6 +23,7 @@ from backend.strategy import (
     BuyStrategy,
     DCAPosition,
     FixedBuyStrategy,
+    MovingAverageBuyStrategy,
     SellStrategy,
     TargetProfitSellStrategy,
     TrailingStopSellStrategy,
@@ -105,6 +106,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--value-avg", type=float, default=0, help="【价值平均】每期市值增长目标 (如 1000 表示每月目标增长 1000 元市值)")
     p.add_argument("--va-max-multiple", type=float, default=4.0, help="【价值平均】每期最大投入倍数 (默认 4 倍)")
     p.add_argument("--va-min-amount", type=float, default=10.0, help="【价值平均】最低申购金额 (默认 10 元)")
+
+    p.add_argument("--ma-period", type=int, default=0, help="【均线策略】均线周期 (如 250，>0 启用均线策略，忽略 --value-avg)")
     return p.parse_args()
 
 
@@ -566,7 +569,23 @@ def main() -> None:
             raise BacktestError("未能生成有效的定投日期")
 
         # 构造策略对象
-        if args.value_avg > 0:
+        if args.ma_period > 0:
+            # 加载 start_date 之前的净值用于均线计算（回测第1年不缺均线）
+            ma_start = (pd.Timestamp(args.start) - pd.Timedelta(days=args.ma_period * 2)).strftime("%Y-%m-%d")
+            try:
+                extra = db.fund_nav_history.load(args.fund, ma_start, args.start)
+                if extra is not None and not extra.empty:
+                    extra["date"] = pd.to_datetime(extra["净值日期"])
+                    extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
+                    extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
+                    ma_nav = pd.concat([extra, nav_df], ignore_index=True)
+                    ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+                else:
+                    ma_nav = nav_df
+            except Exception:
+                ma_nav = nav_df
+            buy_strategy = MovingAverageBuyStrategy(args.amount, args.ma_period, args.fee, ma_nav)
+        elif args.value_avg > 0:
             buy_strategy = ValueAveragingBuyStrategy(
                 args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
         else:

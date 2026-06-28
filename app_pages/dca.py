@@ -19,7 +19,8 @@ from backend.dca_backtest import (
     simulate_dca,
     calc_lumpsum,
 )
-from backend.strategy import FixedBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
+from backend.strategy import FixedBuyStrategy, MovingAverageBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
+import db
 from tools.stats import calc_annualized, max_drawdown
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
@@ -40,24 +41,28 @@ with st.sidebar:
 
     buy_type = st.selectbox(
         "买入策略",
-        ["定期定额", "价值平均"],
-        format_func=lambda x: {"定期定额": "定期定额（每期固定金额）", "价值平均": "价值平均（每期增长固定市值）"}[x],
+        ["定期定额", "价值平均", "指数均线"],
+        format_func=lambda x: {"定期定额": "定期定额（每期固定金额）", "价值平均": "价值平均（每期增长固定市值）", "指数均线": "指数均线（低估多买高估少买）"}[x],
     )
 
     amount = 1000.0
     va_target = 1000.0
     va_max_multiple = 4.0
     va_min_amount = 10.0
+    ma_period = 0
 
     if buy_type == "定期定额":
         amount = st.number_input("每期定投金额（元）", 1.0, 1e8, 1000.0, step=100.0)
-    else:
+    elif buy_type == "价值平均":
         va_target = st.number_input("每期市值增长目标（元）", 1.0, 1e8, 1000.0, step=100.0)
         c1, c2 = st.columns(2)
         with c1:
             va_max_multiple = st.number_input("最大投入倍数", 1.0, 100.0, 4.0, 0.5)
         with c2:
             va_min_amount = st.number_input("最低申购金额（元）", 1.0, 1000.0, 10.0, 5.0)
+    else:
+        amount = st.number_input("基础每期金额（元）", 1.0, 1e8, 1000.0, step=100.0)
+        ma_period = st.selectbox("均线周期", [120, 250], index=1, help="低于均线多买，高于均线少买")
 
     freq = st.selectbox(
         "定投频率",
@@ -148,7 +153,22 @@ with st.spinner("正在获取数据并计算…"):
     elif strategy == "策略B: 停投持有+移动止盈":
         sell_strategy = TrailingStopSellStrategy(stop_invest / 100, trailing_stop / 100)
 
-    if buy_type == "价值平均":
+    if buy_type == "指数均线":
+        ma_start = (start_date - pd.Timedelta(days=ma_period * 2)).strftime("%Y-%m-%d")
+        try:
+            extra = db.fund_nav_history.load(fund_code, ma_start, start_str)
+            if extra is not None and not extra.empty:
+                extra["date"] = pd.to_datetime(extra["净值日期"])
+                extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
+                extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
+                ma_nav = pd.concat([extra, nav_df], ignore_index=True)
+                ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+            else:
+                ma_nav = nav_df
+        except Exception:
+            ma_nav = nav_df
+        buy_strategy = MovingAverageBuyStrategy(amount, ma_period, fee / 100, ma_nav)
+    elif buy_type == "价值平均":
         buy_strategy = ValueAveragingBuyStrategy(va_target, va_max_multiple, va_min_amount, fee / 100)
     else:
         buy_strategy = FixedBuyStrategy(amount, fee / 100)
