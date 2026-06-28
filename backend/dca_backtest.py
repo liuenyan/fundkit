@@ -236,6 +236,52 @@ def calc_redeem_fee(
     return fee
 
 
+def _execute_sell(
+    pos: DCAPosition, date: pd.Timestamp, nav: float,
+    mkt_value: float, round_return: float, sell_reason: str,
+    redeem_schedule: list[tuple[int, float]] | None,
+    tp_cycle: bool,
+    sell_strategy: SellStrategy,
+    buy_strategy: BuyStrategy,
+) -> dict[str, Any]:
+    """执行卖出：计算赎回费、重置持仓、返回事件记录"""
+    fee = calc_redeem_fee(pos.fee_batches, date, nav, redeem_schedule)
+    net = mkt_value - fee
+    event = {
+        "date": date, "nav": nav, "return_rate": round_return,
+        "round_cost": pos.cost, "profit": mkt_value - pos.cost,
+        "redeem_fee": fee, "net_proceeds": net, "reason": sell_reason,
+    }
+    pos.total_recovered += net
+    pos.units = 0.0
+    pos.cost = 0.0
+    pos.peak_return = -INF
+    pos.fee_batches = []
+    pos.is_active = tp_cycle
+    sell_strategy.on_reset()
+    buy_strategy.on_reset()
+    return event
+
+
+def _build_record(
+    date: pd.Timestamp, nav: float,
+    inv_today: float, unit_added: float, div_units: float,
+    pos: DCAPosition, mkt_value: float,
+) -> dict[str, Any]:
+    """构建单日快照记录"""
+    total_value = mkt_value + pos.total_recovered
+    overall_profit = total_value - pos.total_invested
+    overall_return = overall_profit / pos.total_invested if pos.total_invested > 0 else 0.0
+    return {
+        "date": date, "nav": nav, "investment": inv_today,
+        "units_added": unit_added, "dividend_units": div_units,
+        "total_units": pos.units, "total_cost": pos.cost,
+        "market_value": mkt_value, "profit": overall_profit,
+        "return_rate": overall_return,
+        "total_invested": pos.total_invested, "total_value": total_value,
+    }
+
+
 def simulate_dca(
     nav_df: pd.DataFrame,
     invest_dates: pd.DatetimeIndex,
@@ -257,17 +303,14 @@ def simulate_dca(
 
     for date in nav_df["date"]:
         nav = nav_dict[date]
-
-        inv_today = 0.0
-        unit_added = 0.0
-        div_units = 0.0
+        inv_today = unit_added = div_units = 0.0
 
         # ── 分红再投资 ──
         div_units = reinvest_dividends(pos.units, nav, date, dividend_dict)
         if div_units > 0:
             pos.units += div_units
 
-        # ── 申购（委托买入策略）──
+        # ── 申购 ──
         action = buy_strategy.should_buy(date, nav, pos, invest_set)
         if action.amount > 0:
             net = action.amount * (1 - action.fee_rate)
@@ -278,21 +321,18 @@ def simulate_dca(
             inv_today = action.amount
             pos.fee_batches.append({"date": date, "units": unit_added})
 
-        # ── 当前持仓市值 ──
+        # ── 持仓市值 ──
         if pos.units > 0:
             mkt_value = pos.units * nav
             round_return = (mkt_value - pos.cost) / pos.cost
         else:
-            mkt_value = 0.0
-            round_return = 0.0
-
+            mkt_value = round_return = 0.0
         if pos.units > 0 and round_return > pos.peak_return:
             pos.peak_return = round_return
 
-        # ── 卖出检查（委托卖出策略）──
+        # ── 卖出 ──
         should_sell = False
         sell_reason = ""
-
         if sell_strategy is not None:
             signal = sell_strategy.evaluate(date, nav, pos, mkt_value, round_return)
             if signal.stop_buying:
@@ -302,52 +342,16 @@ def simulate_dca(
                 sell_reason = signal.reason
 
         if should_sell:
-            fee = calc_redeem_fee(pos.fee_batches, date, nav, redeem_schedule)
-            net = mkt_value - fee
-            events.append({
-                "date": date,
-                "nav": nav,
-                "return_rate": round_return,
-                "round_cost": pos.cost,
-                "profit": mkt_value - pos.cost,
-                "redeem_fee": fee,
-                "net_proceeds": net,
-                "reason": sell_reason,
-            })
-            pos.total_recovered += net
-            pos.units = 0.0
-            pos.cost = 0.0
-            mkt_value = 0.0
-            round_return = 0.0
-            pos.peak_return = -INF
-            pos.fee_batches = []
-            pos.is_active = tp_cycle
-            sell_strategy.on_reset()
-            buy_strategy.on_reset()
+            event = _execute_sell(pos, date, nav, mkt_value, round_return,
+                                  sell_reason, redeem_schedule, tp_cycle,
+                                  sell_strategy, buy_strategy)
+            events.append(event)
+            mkt_value = round_return = 0.0
 
-        # ── 整体组合指标 ──
-        total_value = mkt_value + pos.total_recovered
-        overall_profit = total_value - pos.total_invested
-        overall_return = overall_profit / pos.total_invested if pos.total_invested > 0 else 0.0
-
-        # 无止盈策略只记录定投日和分红日
-        if not stop_profit_on and date not in invest_set and div_units == 0:
-            continue
-
-        records.append({
-            "date": date,
-            "nav": nav,
-            "investment": inv_today,
-            "units_added": unit_added,
-            "dividend_units": div_units,
-            "total_units": pos.units,
-            "total_cost": pos.cost,
-            "market_value": mkt_value,
-            "profit": overall_profit,
-            "return_rate": overall_return,
-            "total_invested": pos.total_invested,
-            "total_value": total_value,
-        })
+        # ── 记录 ──
+        if stop_profit_on or date in invest_set or div_units > 0:
+            records.append(_build_record(date, nav, inv_today, unit_added,
+                                          div_units, pos, mkt_value))
 
     detail = pd.DataFrame(records)
     if detail.empty:
