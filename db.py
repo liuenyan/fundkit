@@ -294,7 +294,9 @@ class _BulkTable(_FundTable):
             return None
 
     def save(self, df: pd.DataFrame) -> None:
-        df.to_sql(self.table.name, engine, if_exists="replace", index=False)
+        with engine.begin() as conn:
+            conn.execute(text(f"DELETE FROM {self.table.name}"))
+        df.to_sql(self.table.name, engine, if_exists="append", index=False)
         self.set_fresh()
 
 
