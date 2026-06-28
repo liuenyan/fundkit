@@ -293,13 +293,15 @@ def enrich_fee_scale(result: pd.DataFrame, scale_source: pd.DataFrame | None = N
     return result
 
 
-def sort_result(result: pd.DataFrame, sort_by: str | None) -> pd.DataFrame:
+def sort_result(result: pd.DataFrame, sort_by: str | None,
+                sort_options: dict[str, Any] | None = None) -> pd.DataFrame:
     """通用排序"""
-    sort_config = SORT_OPTIONS.get(sort_by) if sort_by else None
-    if sort_config:
-        col, asc = sort_config
+    opts = sort_options or SORT_OPTIONS
+    config = opts.get(sort_by) if sort_by else None
+    if config:
+        col, asc = config
         if col in result.columns:
-            return result.sort_values(col, ascending=asc).reset_index(drop=True)
+            return result.sort_values(col, ascending=asc, na_position="last").reset_index(drop=True)
     result["_name_len"] = result.get("基金名称", pd.Series(dtype=str)).str.len()
     result = result.sort_values("_name_len")
     drop_cols = [c for c in result.columns if c.startswith("_")]
