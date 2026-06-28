@@ -245,7 +245,7 @@ def simulate_dca(
     dividend_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, list[dict[str, Any]], float, float]:
     """执行定投模拟"""
-    nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
+    nav_dict = nav_df.set_index("date")["unit_nav"].to_dict()
     dividend_dict = build_dividend_dict(dividend_df)
 
     stop_profit_on = sell_strategy is not None

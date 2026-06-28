@@ -152,7 +152,7 @@ def classify_fund_type(name: str) -> str:
 
 
 def filter_funds(df: pd.DataFrame, fund_type: str | None = None, share_class: str | None = None) -> pd.DataFrame:
-    result = df.copy()
+    result = df
     if fund_type:
         result = result[result["基金名称"].apply(classify_fund_type) == fund_type]
     if share_class:
