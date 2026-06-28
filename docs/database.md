@@ -10,7 +10,8 @@
 | `fund_fee` | 26,770 | 基金费率（申购/管理/托管/销售服务） | ✅ 活跃 |
 | `fund_scale` | 26,505 | 基金规模（净资产/份额） | ✅ 活跃 |
 | `fund_profile` | 26,770 | 基金基本信息/档案 | ✅ 活跃 |
-| `fund_nav` | 25,333 | 基金最新净值 | ✅ 活跃 |
+| `fund_nav` | 25,333 | 基金最新净值（日频快照） | ✅ 活跃 |
+| `fund_nav_history` | 3,273/基 | 基金全量历史净值（回测缓存） | ✅ 活跃 |
 | `index_series` | 73,742 | 指数估值时序（PE/PB/点位） | ✅ 活跃 |
 | `cache_meta` | 17 | 估值数据源元信息 | ✅ 活跃 |
 | `funds_meta` | 3 | 缓存 TTL 标记 | ✅ 活跃 |
@@ -131,6 +132,35 @@
 
 ---
 
+## `fund_nav_history` — 基金全量历史净值（回测缓存）
+
+**用途**: 定投回测 `fetch_fund_data()` 的本地缓存，避免每次回测都请求 HTTP API。
+
+**来源**: `backend/em_fetcher.fetch_nav_data()` — 一次 HTTP 请求解析东方财富 JS 文件 `pingzhongdata/{code}.js`，返回全量历史（~9 年，~3273 条/基）。
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| `基金代码` | TEXT PK | 6 位基金代码 |
+| `日期` | TEXT PK | 净值日期（`YYYY-MM-DD`） |
+| `单位净值` | FLOAT | 当日单位净值 |
+| `累计净值` | FLOAT | 当日累计净值 |
+| `日增长率` | FLOAT | 日增长率（百分数，如 `0.58` 表示 +0.58%） |
+| `updated_at` | FLOAT | unix 时间戳 |
+
+**主键**: `(基金代码, 日期)` — 同一只基金同一天只存一条。
+
+### 缓存策略
+
+`is_cached(fund_code, end_date)` 通过 `_last_available_data_day()` 确定 end_date 已知的最新交易日，与缓存 `MAX(日期)` 比较：
+
+| 条件 | 回退交易日 | 举例 |
+|------|-----------|------|
+| `end_date` 是周末 | 本周五 | 周日→上周五 |
+| 今天且 `now.hour < 22` | 上一个交易日 | 周三 09:00→周二 |
+| 其他 | `end_date` 本身 | 周四(非今天)→周四 |
+
+---
+
 ## `index_series` — 指数估值时序
 
 **来源**: AKShare `stock_zh_index_value_csindex()` + `bond_zh_us_rate()` 等
@@ -175,7 +205,7 @@
 
 ```python
 # 所有表通过模块级单例访问，统一位于 db 模块下
-from db import fund_fees, fund_scale, fund_profile, fund_nav, fund_catalog
+from db import fund_fees, fund_scale, fund_profile, fund_nav, fund_catalog, fund_nav_history
 ```
 
 ### 类体系
@@ -183,26 +213,32 @@ from db import fund_fees, fund_scale, fund_profile, fund_nav, fund_catalog
 ```
 _FundTable                  基类：is_fresh / set_fresh / clear
  ├── _DictTable             加载为 {code: dict}
- │    ├── FundFeeTable      db.fund_fees    meta_key="fund_fee"
- │    ├── FundScaleTable    db.fund_scale   meta_key=None
- │    └── FundProfileTable  db.fund_profile meta_key=None
+ │    ├── FundFeeTable      db.fund_fees      meta_key="fund_fee"
+ │    ├── FundScaleTable    db.fund_scale     meta_key=None
+ │    └── FundProfileTable  db.fund_profile   meta_key=None
  └── _BulkTable             全表 DataFrame 操作
-      ├── FundNavTable      db.fund_nav     meta_key="fund_nav"
-      └── FundCatalogTable  db.fund_catalog meta_key="fund_catalog"
+      ├── FundNavTable      db.fund_nav       meta_key="fund_nav"
+      └── FundCatalogTable  db.fund_catalog   meta_key="fund_catalog"
+
+FundNavHistoryTable         历史净值缓存（独立 OOP，异构接口）
+     db.fund_nav_history    meta_key=None     is_cached / load / save
 ```
 
 ### 方法说明
 
-| 方法 | _FundTable | _DictTable | _BulkTable | 说明 |
-|------|-----------|-----------|-----------|------|
-| `is_fresh(ttl)` | ✅ | 继承 | 继承 | 检查 `funds_meta` 的 `updated_at` 是否在 TTL 内 |
-| `set_fresh()` | ✅ | 继承 | 继承 | 写入当前时间戳到 `funds_meta` |
-| `clear()` | ✅ | 继承 | 继承 | `DELETE FROM 表` + 清理对应 `funds_meta` 记录 |
-| `_load_rows(codes)` | — | ✅ | — | `SELECT * FROM 表 WHERE 基金代码 IN (codes)` 返回 `{code: Row}` |
-| `load(codes)` | — | ✅ | — | 返回 `{code: {列名: 值, ...}}` |
-| `load()` | — | — | ✅ | 返回全表 `DataFrame` |
-| `save(df)` | — | — | ✅ | `df.to_sql(if_exists="replace")` + `set_fresh()` |
-| `cached_count()` | — | FundFeeTable 独有 | — | `SELECT COUNT(*) FROM fund_fee` |
+| 方法 | _FundTable | _DictTable | _BulkTable | FundNavHistoryTable | 说明 |
+|------|-----------|-----------|-----------|-------------------|------|
+| `is_fresh(ttl)` | ✅ | 继承 | 继承 | — | 检查 `funds_meta` 的 `updated_at` 是否在 TTL 内 |
+| `set_fresh()` | ✅ | 继承 | 继承 | — | 写入当前时间戳到 `funds_meta` |
+| `clear()` | ✅ | 继承 | 继承 | — | `DELETE FROM 表` + 清理对应 `funds_meta` 记录 |
+| `_load_rows(codes)` | — | ✅ | — | — | `SELECT * FROM 表 WHERE 基金代码 IN (codes)` 返回 `{code: Row}` |
+| `load(codes)` | — | ✅ | — | — | 返回 `{code: {列名: 值, ...}}` |
+| `load()` | — | — | ✅ | — | 返回全表 `DataFrame` |
+| `save(df)` | — | — | ✅ | — | `df.to_sql(if_exists="replace")` + `set_fresh()` |
+| `cached_count()` | — | FundFeeTable 独有 | — | — | `SELECT COUNT(*) FROM fund_fee` |
+| `is_cached(code, end_date)` | — | — | — | ✅ | 检查缓存是否覆盖 `end_date` 已知最新交易日 |
+| `load(code, start, end)` | — | — | — | ✅ | 读取指定基金/日期范围的净值 |
+| `save(code, df)` | — | — | — | ✅ | OR REPLACE 批量写入全量历史 |
 
 ### 使用示例
 

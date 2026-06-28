@@ -2,17 +2,17 @@
 
 ## 🔴 Bug / 数据正确性
 
-### 1. `db.py:117-127` — `fund_nav` 表主键缺失 `日期` 字段
+### 1. 缺少回测历史净值缓存 —— 新建 `fund_nav_history` 表 ✅
 
-当前主键仅为 `基金代码`，意味着同一只基金只能存一条净值记录。当前 `collect_fund_nav()` 是全表 replace 模式，所以不会丢数据，但若未来要存多条历史净值，这个 PK 设计就是 bug。
+`fund_nav` 是全量快照表（覆写模式），不适合存储回测所需的全部历史净值。`fetch_fund_data()` 每次调用都访问 HTTP API。
 
-**建议**: 改为复合主键 `(基金代码, 日期)`。
+**修复**: 新建 `fund_nav_history` 表，复合主键 `(基金代码, 日期)`；新增 `FundNavHistoryTable` 类（`is_cached`/`load`/`save`）；`fetch_fund_data()` 缓存优先。详见 `db.py:327-382`。
 
-### 2. `dca_backtest.py:105-136` — `fetch_fund_data` 完全绕过本地 DB 缓存
+### 2. `dca_backtest.py` — `fetch_fund_data` 绕过本地缓存 + `sys.exit(1)` 异常处理粗糙 ✅
 
-每次回测都调用两次 AKShare API（`fund_open_fund_info_em` × 2），即使 `db.fund_nav` 表已有缓存数据。回测必须联网且每次都很慢。
+每次回测都调用 HTTP API 获取净值，且出错时直接 `sys.exit(1)`，Streamlit UI 只能靠 `SystemExit` 捕获。
 
-**建议**: 回测时优先读取本地 `fund_nav` 缓存，AKShare 作为兜底。
+**修复**: `fetch_fund_data` 缓存优先（cache-first），远程获取后自动写入 `fund_nav_history`。新增 `BacktestError` 异常替代 `sys.exit(1)`，CLI `main()` 统一 `try/except BacktestError → sys.exit(1)`，GUI 直接 `st.error() + st.stop()`。删除 `safe_call` 包装器。
 
 ### 3. `db.py:340-346` — `upsert_series()` 使用 `OR IGNORE` 而非 `OR REPLACE` ✅
 
@@ -144,7 +144,7 @@ nav_dict = dict(zip(nav_df["date"], nav_df["unit_nav"]))
 
 | 优先级 | 问题编号 | 影响 |
 |--------|----------|------|
-| P0 | #1, #2 | 数据正确性 / 功能可用性 |
+| P0 ~~#1, #2~~ | ~~回测历史缓存 + BacktestError~~ | ✅ 已完成 |
 | P0 ~~#3~~ | ~~估值数据准确性~~ | ✅ 已完成 |
 | P1 | ~~#4~~, ~~#5~~, ~~#6~~ | 性能瓶颈 |
 | P1 | ~~#10~~ | 启动效率 |

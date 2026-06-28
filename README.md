@@ -2,9 +2,9 @@
 
 # FundKit — 中国公募基金工具箱
 
-一站式中国公募基金分析工具，覆盖**定投回测**、**指数估值**、**指数选基**三大场景。数据源基于天天基金网、中证指数、乐咕乐股等公开平台（通过 [AKShare](https://github.com/akfamily/akshare) 获取），提供 Streamlit 图形界面与 CLI 双模式。
+一站式中国公募基金分析工具，覆盖**定投回测**、**基金查询**、**指数选基**、**养老金选基**、**指数估值**五大场景。数据源基于天天基金网、中证指数、乐咕乐股等公开平台（通过 [AKShare](https://github.com/akfamily/akshare) 获取），提供 Streamlit 图形界面与 CLI 双模式。
 
-## 功能
+## 功能（按 Streamlit 页面顺序）
 
 ### 定投回测
 
@@ -18,6 +18,32 @@
 - 图表输出：双面板 PNG（净值 + 成本 / 收益率 + 回撤）
 - CSV 导出
 
+### 基金查询
+
+按基金代码或名称搜索基金，查看基本信息、净值、费率、规模等关键指标。
+
+- 文本搜索：基金代码、名称拼音、关键词
+- 信息展示：基金类型、基金经理、成立日期、管理/托管费率
+- 一键跳转定投回测：点击即带基金代码参数跳转
+
+### 指数选基
+
+按指数名称搜索跟踪该指数的全部基金，对比规模、费率等指标，快速跳转定投回测。
+
+- 搜索方式：文本搜索 + 热门指数下拉列表
+- 综合费率展示：申购费（实际折扣后）+ 管理费 + 托管费
+- 筛选：基金类型（ETF联接 / 指数增强 / 普通指数型）、份额类别（A / C / 其他）
+- 排序：费率、规模、净值
+- 一键跳转定投回测
+
+### 养老金选基
+
+筛选个人养老金账户可投资的 Y 份额基金，按类型（指数基金、FOF-目标日期、FOF-目标风险）分类展示，支持规模/费率排序。
+
+- 数据源全 DB 查询，零 API 冷启动
+- 自动加载 Y 份额净值、费率、规模
+- 管理费/托管费懒加载缓存（会话级）
+
 ### 指数估值
 
 追踪主流指数的 PE / PB 历史百分位，辅助判断估值高低。
@@ -28,58 +54,50 @@
 - 中证红利股息率 vs 十年期国债收益率：历史对比双轴图
 - 低估 / 适中 / 高估 三档标签
 
-### 指数选基
-
-按指数名称搜索跟踪该指数的全部基金，对比规模、费率等指标，快速跳转定投回测。
-
-- 搜索方式：文本搜索 + 热门指数下拉列表
-- 综合费率展示：申购费（实际折扣后）+ 管理费 + 托管费
-- 筛选：基金类型（ETF联接 / 指数增强 / 普通指数型）、份额类别（A / C / 其他）
-- 排序：费率、规模、净值
-- 一键跳转定投回测：点击即带参数跳转至定投回测页
-
-### 养老金选基
-
-筛选个人养老金账户可投资的 Y 份额基金，按类型（指数基金、FOF-目标日期、FOF-目标风险）分类展示，支持规模/费率排序。
-
-- 数据源全 DB 查询，零 API 冷启动
-- 自动加载 Y 份额净值、费率、规模
-- 管理费/托管费懒加载缓存（会话级）
-
 ## 架构
 
 ```
 fundkit/
-├── app.py                   # Streamlit 导航中枢（四个页面）
+├── app.py                   # Streamlit 导航中枢（st.navigation，五个页面）
 │
 ├── backend/                 # 业务逻辑层
 │   ├── __init__.py
-│   ├── dca_backtest.py      # 定投回测 CLI 主程序（python -m backend.dca_backtest）
-│   ├── index_valuation.py   # 指数估值百分位计算后端
+│   ├── dca_backtest.py      # 定投回测 CLI 主程序（cache-first，BacktestError 异常）
+│   ├── em_fetcher.py        # 东方财富 pingzhongdata JS 直取（一次 HTTP + JS eval）
+│   ├── strategy.py          # 买入/卖出策略对象（固定金额、价值平均、目标止盈、移动止盈）
+│   ├── charting.py          # matplotlib 双面板图表绘制
+│   ├── fund_query.py        # 基金查询逻辑
 │   ├── index_fund.py        # 指数选基数据获取 + 搜索/筛选/排序
 │   ├── pension_fund.py      # 养老金选基后端
+│   ├── index_valuation.py   # 指数估值百分位计算后端
 │   └── fund_data.py         # 基金数据共享层（费率解析、规模兜底等）
 │
-├── collect_fund_data.py     # 预采集脚本（费率/规模/档案/净值/名录/跟踪方式，根目录独立分层）
-├── db.py                    # SQLAlchemy Core 数据库层（SQLite，WAL 模式，9 张活跃表）
-├── cjk_font.py              # 中文字体检测与设置
+├── app_pages/               # Streamlit 页面（与 app.py 一一对应）
+│   ├── dca.py               # 定投回测
+│   ├── fund_query.py        # 基金查询
+│   ├── index_fund.py        # 指数选基
+│   ├── pension_fund.py      # 养老金选基
+│   └── index_valuation.py   # 指数估值
 │
-├── app_pages/
-│   ├── dca.py               # 定投回测页面
-│   ├── index_valuation.py   # 指数估值页面
-│   ├── index_fund.py        # 指数选基页面
-│   └── pension_fund.py      # 养老金选基页面（Y 份额）
+├── tools/                   # 通用工具模块
+│   ├── cjk_font.py          # 中文字体检测与设置（setup_cjk_font）
+│   ├── stats.py             # 统计函数（max_drawdown / calc_annualized / calc_percentile）
+│   └── formatters.py        # 格式化工具
+│
+├── collect_fund_data.py     # 数据预采集（费率/规模/档案/净值/名录/跟踪方式）
+├── db.py                    # SQLAlchemy Core 数据库层（SQLite WAL，10 张表）
 │
 ├── data/                    # SQLite 数据库目录（自动创建）
 ├── charts/                  # 图表输出目录（自动创建）
+│
 ├── docs/
 │   ├── dca_backtest_cli.md  # 命令行定投回测完整手册
-│   ├── collect_fund_data.md # 预采集工具文档
+│   ├── collect_fund_data.md # 数据采集工具文档
 │   ├── data_source.md       # 数据源调研与选型说明
 │   └── database.md          # 数据库表设计文档
 │
 ├── ruff.toml                # ruff 代码规范配置
-├── requirements.txt         # Python 运行时依赖
+├── requirements.txt         # 运行时依赖
 └── requirements-dev.txt     # 开发依赖（ruff）
 ```
 
@@ -90,17 +108,18 @@ collect_fund_data.py ──预采集──→ SQLite (data/fundkit.db)
                                     │
 Streamlit 页面 ──本地 JOIN 查询──→   │
                                     │
-                                    ├─ fund_catalog   (27,037 只)
-                                    ├─ fund_fee       (26,770 只)
-                                    ├─ fund_scale     (26,505 只)
-                                    ├─ fund_profile   (26,770 只)
-                                    ├─ fund_nav       (25,333 只)
-                                    ├─ index_series   (73,742 条)
-                                    ├─ cache_meta     (17 条)
-                                    └─ funds_meta     (3 条 TTL 标记)
+                                    ├─ fund_catalog    (27,037 只)
+                                    ├─ fund_fee        (26,770 只)
+                                    ├─ fund_scale      (26,505 只)
+                                    ├─ fund_profile    (26,770 只)
+                                    ├─ fund_nav        (25,333 只)  ← 日频快照
+                                    ├─ fund_nav_history(3,273 条/基) ← 全量历史缓存(回测用)
+                                    ├─ index_series    (73,742 条)
+                                    ├─ cache_meta      (17 条)
+                                    └─ funds_meta      (3 条 TTL 标记)
 ```
 
-**关键设计**：所有 Streamlit 页面（指数选基、养老金选基）通过 `db.py` 的本地 JOIN 查询读取缓存，**零 AKShare API 调用**。预采集脚本 `collect_fund_data.py` 独立管理各数据的 TTL（费率 90 天 / 净值 24 小时 / 名录 90 天）。
+**关键设计**：所有 Streamlit 页面通过 `db.py` 的本地 JOIN 查询读取缓存，**零 AKShare API 调用**。预采集脚本 `collect_fund_data.py` 独立管理各数据的 TTL（费率 90 天 / 净值 24 小时 / 名录 90 天）。定投回测 `fetch_fund_data()` 优先读取 `fund_nav_history` 本地缓存。
 
 ## 核心技术
 
@@ -112,6 +131,7 @@ Streamlit 页面 ──本地 JOIN 查询──→   │
 | pandas / numpy | 数据处理与计算 |
 | matplotlib | 图表绘制 |
 | SQLAlchemy Core | 数据库管理（SQLite + WAL 模式） |
+| py_mini_racer | JS 引擎（解析东方财富 pingzhongdata 文件） |
 
 ## 快速开始
 

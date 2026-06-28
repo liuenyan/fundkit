@@ -5,7 +5,7 @@ Single-file Python CLI for DCA (定投) backtesting of Chinese open-end funds.
 ## Run
 
 ```bash
-./venv/bin/python dca_backtest.py --fund 161725 --amount 1000 --start 2018-01-01
+./venv/bin/python -m backend.dca_backtest --fund 161725 --amount 1000 --start 2018-01-01
 # or Streamlit UI
 ./venv/bin/python -m streamlit run app.py
 ```
@@ -38,7 +38,8 @@ System Python won't work (missing deps). Always use `venv/bin/python`.
 
 ```
 main()
-├─ fetch_fund_data()       # AKShare → unit_nav + acc_nav
+├─ fetch_fund_data()       # fund_nav_history cache-first → em_fetcher
+│  └─ BacktestError        # raised on failures, CLI sys.exit(1) / GUI st.error+st.stop
 ├─ fetch_fund_name()       # AKShare fund name lookup
 ├─ generate_dca_dates()    # calendar → nearest trading day
 ├─ simulate_dca()          # core backtest loop (uses strategy objects)
@@ -85,6 +86,7 @@ main()
 ## Progress / TODO
 
 ### Completed
+- `#1+#2`: `fund_nav_history` 缓存表 + `BacktestError` 异常，`fetch_fund_data()` 缓存优先，`app_pages/dca.py` 删除 `safe_call` 包装器
 - `fund_fee` → `fund_scale` / `fund_profile` 分表剥离，迁移 + 回填完成
 - `collect_fees.py` → `collect_fund_data.py` 改名，扩展采集 份额规模 + 档案信息
 - `fund_data.py`: `fetch_mgmt_cust_fees` 返回扩展，`enrich_fee_scale` 新增份额规模兜底
