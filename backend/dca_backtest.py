@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from backend.charting import create_chart
+from backend.em_fetcher import fetch_nav_data
 from backend.strategy import (
     BuyStrategy,
     DCAPosition,
@@ -106,24 +107,19 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
     """获取基金历史净值数据（单位净值 + 累计净值）"""
     print(f"获取基金 {fund_code} 历史净值数据 ...")
     try:
-        df_unit = ak.fund_open_fund_info_em(symbol=fund_code, indicator="单位净值走势")
-        df_acc = ak.fund_open_fund_info_em(symbol=fund_code, indicator="累计净值走势")
+        df = fetch_nav_data(fund_code)
     except Exception as e:
         print(f"获取数据失败: {e}")
         sys.exit(1)
 
-    if df_unit is None or df_unit.empty:
+    if df.empty:
         print("未获取到数据，请检查基金代码是否正确")
         sys.exit(1)
 
-    df_unit = df_unit.rename(columns={"净值日期": "date", "单位净值": "unit_nav", "日增长率": "daily_return"})
-    df_acc = df_acc.rename(columns={"净值日期": "date", "累计净值": "acc_nav"})
-
-    df = df_unit.merge(df_acc, on="date", how="left")
-    df["date"] = pd.to_datetime(df["date"])
-    df["unit_nav"] = pd.to_numeric(df["unit_nav"], errors="coerce")
-    df["acc_nav"] = pd.to_numeric(df["acc_nav"], errors="coerce")
-    df = df.sort_values("date").reset_index(drop=True)
+    df["date"] = pd.to_datetime(df["净值日期"])
+    df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
+    df["acc_nav"] = pd.to_numeric(df["累计净值"], errors="coerce")
+    df["daily_return"] = pd.to_numeric(df["日增长率"], errors="coerce")
 
     mask = (df["date"] >= pd.Timestamp(start_date)) & (df["date"] <= pd.Timestamp(end_date))
     df = df[mask].reset_index(drop=True)
