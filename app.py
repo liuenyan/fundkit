@@ -3,6 +3,9 @@
 Streamlit 导航中枢
 """
 
+import matplotlib
+
+matplotlib.use("Agg")
 import streamlit as st
 
 dca = st.Page("app_pages/dca.py", title="定投回测", icon="📊", url_path="dca")

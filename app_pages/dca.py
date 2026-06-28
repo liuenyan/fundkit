@@ -11,9 +11,6 @@ from typing import Any
 
 import streamlit as st
 import pandas as pd
-import matplotlib
-
-matplotlib.use("Agg")
 from matplotlib.figure import Figure
 
 from backend.charting import create_chart
