@@ -72,7 +72,7 @@
 
 复权口径的偏差分布比累计口径约宽 1.5 倍。若改用复权净值，5 档阈值需同步外扩（如 -10% → -15%）以保持策略行为一致。
 
-## 实现选择
+## 当前实现选择
 
 本工具统一使用**累计净值**作为均线计算口径：
 
@@ -88,6 +88,63 @@
 ```python
 col = "acc_nav" if "acc_nav" in nav_df.columns else "unit_nav"
 ```
+
+## 未来扩展：基于跟踪指数计算均线
+
+上述方案解决的是**基金本身**净值的平滑问题。对于指数基金，还有更精确的思路——直接用基金跟踪的**指数价格**来计算均线。
+
+### 理论依据
+
+```
+基金 unit_nav  =  指数成分股总市值 + 现金  ─  基金自身分红
+                                                  ↑
+                                             基金自身分红只影响基金，
+                                             不影响指数
+```
+
+指数价格不含基金自身分红，且成分股除权在时间上分散，不会导致单日跳降。因此：
+
+- **指数基金场景**：用跟踪指数算 MA 最精确，完全消除分红干扰
+- **主动基金场景**：仍用基金累计净值算 MA（没有跟踪标的）
+
+两层都有意义：
+| 场景 | MA 基于 | 偏离度意义 |
+|------|---------|-----------|
+| 指数基金 + 跟踪指数价格 | 指数 MA | **市场估值** — 指数相对自身历史均值的偏离 |
+| 主动基金 / 无指数数据 | 基金累计净值 MA | **基金自身趋势** — 基金表现相对自身历史均值的偏离 |
+
+### 数据源
+
+AKShare `stock_zh_index_daily_em` 可获取指数历史日线（含前收盘价）：
+
+```python
+import akshare as ak
+
+df = ak.stock_zh_index_daily_em(symbol="sh000922")  # 中证红利
+```
+
+需要基金→指数的映射关系，可从 `fund_profile.跟踪标的` 表获取。
+
+### 架构接口
+
+```python
+class MovingAverageBuyStrategy(BuyStrategy):
+    def __init__(self, base_amount, period, purchase_rate,
+                 nav_df, index_df=None, ...):
+        if index_df is not None:
+            # 基于指数价格算 MA
+            series = index_df.set_index("date")["close"]
+        else:
+            # 回退到基金累计净值
+            series = nav_df.set_index("date")["acc_nav"]
+        self.ma_series = series.rolling(period).mean()
+```
+
+### 当前状态
+
+- ✅ 当前实现：基于基金累计净值（覆盖所有基金类型）
+- ⏳ 未来扩展：支持基于跟踪指数价格计算均线（仅指数基金）
+- ⏳ 待实现：指数数据获取、基金→指数映射、CLI `--index-ma` 参数
 
 ## 验证
 
