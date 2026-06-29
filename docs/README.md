@@ -10,3 +10,4 @@
 | [dca_backtest_cli.md](dca_backtest_cli.md) | 定投回测 CLI 文档 — 参数说明、使用示例 |
 | [strategy_comparison.md](strategy_comparison.md) | 定投策略对比报告 — 定期定额/价值平均/指数均线/一次性投资，覆盖沪深300/中证500/创业板 |
 | [nav_types_analysis.md](nav_types_analysis.md) | 净值口径分析 — 单位净值/累计净值/复权净值对均线策略的影响 |
+| [valuation_targets.md](valuation_targets.md) | 估值定投标的候选列表（已存档，仅供参考） |
