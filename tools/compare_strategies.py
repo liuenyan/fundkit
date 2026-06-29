@@ -78,6 +78,7 @@ def load_ma_buffer(fund_code: str, start_date: str, buffer_days: int = 500) -> p
         if extra is not None and not extra.empty:
             extra["date"] = pd.to_datetime(extra["净值日期"])
             extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
+            extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
             extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
             return extra
     except Exception:

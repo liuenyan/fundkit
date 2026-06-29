@@ -577,6 +577,7 @@ def main() -> None:
                 if extra is not None and not extra.empty:
                     extra["date"] = pd.to_datetime(extra["净值日期"])
                     extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
+                    extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
                     extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
                     ma_nav = pd.concat([extra, nav_df], ignore_index=True)
                     ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)

@@ -58,9 +58,10 @@ class MovingAverageBuyStrategy(BuyStrategy):
         self.purchase_rate = purchase_rate
         self.tiers = tiers or self.DEFAULT_TIERS
         self.multipliers = multipliers or self.DEFAULT_MULTIPLIERS
-        # 用 date 作为 index，确保 should_buy 能按日期查找
-        nav_series = nav_df.set_index("date")["unit_nav"]
-        self.ma_series = nav_series.rolling(window=period, min_periods=period).mean()
+        # 优先用累计净值（平滑，无分红跳降），回退单位净值
+        col = "acc_nav" if "acc_nav" in nav_df.columns else "unit_nav"
+        self._nav_index = nav_df.set_index("date")[col]
+        self.ma_series = self._nav_index.rolling(window=period, min_periods=period).mean()
 
     def should_buy(self, date: pd.Timestamp, nav: float, pos: DCAPosition,
                    invest_set: set[pd.Timestamp]) -> BuyAction:
@@ -71,7 +72,8 @@ class MovingAverageBuyStrategy(BuyStrategy):
         if ma is None or pd.isna(ma) or ma == 0:
             return BuyAction(amount=self.base_amount, fee_rate=self.purchase_rate)
 
-        deviation = (nav - ma) / ma
+        current = self._nav_index.get(date, nav)
+        deviation = (current - ma) / ma
         multiple = self._deviation_to_multiple(deviation)
         amount = self.base_amount * multiple
         return BuyAction(amount=max(amount, 0) if amount > 0 else 0, fee_rate=self.purchase_rate)
