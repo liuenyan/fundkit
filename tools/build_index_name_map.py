@@ -101,6 +101,16 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
 
     # 非权益
     "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
+
+    # ── 海外指数 P0（Sina 财经可获取价格）──
+    # 恒生系列 via stock_hk_index_daily_sina (normalize strips "指数" → keys are stemmed)
+    # market_prefix=None：Sina API 的 symbol 在 index_code 中已完整，无需拼接
+    "恒生":              ("HSI", None, "sina_hk", "equity", "恒生指数"),
+    "恒生中国企业":      ("HSCEI", None, "sina_hk", "equity", "恒生国企"),
+    "恒生科技":         ("HSTECH", None, "sina_hk", "equity", "恒生科技"),
+    # 美股系列 via index_us_stock_sina
+    "纳斯达克100":      (".NDX", None, "sina_us", "equity", "纳指100"),
+    "道琼斯工业平均":   (".DJI", None, "sina_us", "equity", "道琼斯"),
 }
 
 
@@ -123,6 +133,24 @@ def _verify_daily_em(prefix: str, code: str) -> bool:
             start_date="20200101",
             end_date=_TODAY,
         )
+        return df is not None and not df.empty
+    except Exception:
+        return False
+
+
+def _verify_sina_hk(symbol: str) -> bool:
+    """验证 stock_hk_index_daily_sina 能否返回数据"""
+    try:
+        df = ak.stock_hk_index_daily_sina(symbol=symbol)
+        return df is not None and not df.empty
+    except Exception:
+        return False
+
+
+def _verify_sina_us(symbol: str) -> bool:
+    """验证 index_us_stock_sina 能否返回数据"""
+    try:
+        df = ak.index_us_stock_sina(symbol=symbol)
         return df is not None and not df.empty
     except Exception:
         return False
@@ -292,6 +320,10 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                         prefix = em_prefix
             elif source == "daily_em":
                 verified_ok = _verify_daily_em(prefix, code)
+            elif source == "sina_hk":
+                verified_ok = _verify_sina_hk(code)
+            elif source == "sina_us":
+                verified_ok = _verify_sina_us(code)
 
         success.append({
             "tracking_target": target,

@@ -96,16 +96,18 @@ main()
 - `index_fund.py` 从 `fund_profile` 读取 `跟踪方式` 替代 AKShare 硬编码值，兜底名称启发式
 - `fund_nav` 表建成：`基金代码/日期/单位净值/累计净值/日增长率/数据来源/updated_at`，双源采集（`fund_open_fund_daily_em` 23,529 只 + `fund_etf_fund_daily_em` 1,549 只），覆盖 6,349 / 6,490 指数基金 (97.8%)
 - `fetch_all_index_funds()` 重构为本地 SQL JOIN 优先：`fund_nav` 缓存有效时零 API 调用，JOIN `fund_catalog` + `fund_profile` + `fund_fee` + `fund_scale` 四表。支持 `collect_fund_data.py --nav` 独立刷新净值缓存
-- `tools/build_index_name_map.py`: `index_name_map` 表构建器，映射率从 103/367 (22%) 提升至 485/36 (93%)
-  - 匹配优先级：`KNOWN_MAP`(6) → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx），含归一化 fallback（解决"中证180 ESG指数" vs "中证180ESG" 等空格/后缀不一致）
+- `tools/build_index_name_map.py`: `index_name_map` 表构建器，映射率从 103/367 (22%) 提升至 491/35 (93%)
+  - 匹配优先级：`KNOWN_MAP`(12) → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx），含归一化 fallback（解决"中证180 ESG指数" vs "中证180ESG" 等空格/后缀不一致）
   - `normalize()` 自动剥离 `人民币`/`港元`/`美元`/`港币` 货币后缀；兼容全角+半角混合括号
-  - KNOWN_MAP 保留 7 条数据源无法覆盖的条目（上证科创板新能源主题、国证新能源汽车、中证800有色、中证细分化工产业主题全收益、创业板200、责任、上海金）
+  - KNOWN_MAP 12 条：7 条国内 + 5 条海外 P0（恒生指数/恒生中国企业/恒生科技/纳斯达克100/道琼斯工业平均），source 支持 `sina_hk`/`sina_us` 路由
   - 运行时 API 失败回退 `acc_nav`
   - 聚宽（index_stock_info）已移除：0% 唯一贡献
+  - 验证支持 `_verify_sina_hk()` / `_verify_sina_us()` 对 Sina 源的正确性检查
 - `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
 - `tools/csi_export.py`: 中证指数官网导出接口 (`POST csindex-home/exportExcel/indexAll/CH`)，返回 2,967 条指数（1,847 条股票类）。`get_equity_name_map()` 基于 指数简称 + 指数全称去"指数"后缀构建 5,471 条名称映射。本地 CSV 缓存 `data/csi_index_list.csv`，支持 `--force` 刷新
 - `tools/cnindex_export.py`: 国证指数官网 xlsx 导出 (`cnindex.com.cn`)，返回 1,384 条指数（1,212 条股票类），补深证/国证系列。本地 CSV 缓存 `data/cnindex_index_list.csv`
 - `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
+- `docs/overseas_index_mapping.md`: 海外指数映射方案文档，定义三层映射策略：P0(Sina价格源) / P1(代码映射+acc_nav回退) / P2(不处理)。已落地 5 条 P0（恒生×3 + 美股×2），mapping 从 486→491
 
 ## Quirks
 
