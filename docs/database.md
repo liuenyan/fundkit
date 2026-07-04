@@ -13,6 +13,7 @@
 | `fund_nav` | 25,333 | 基金最新净值（日频快照） | ✅ 活跃 |
 | `fund_nav_history` | 3,273/基 | 基金全量历史净值（回测缓存） | ✅ 活跃 |
 | `index_series` | 73,742 | 指数估值时序（PE/PB/点位） | ✅ 活跃 |
+| `index_name_map` | 477 | 跟踪标的名称→指数代码映射 | ✅ 活跃 |
 | `cache_meta` | 17 | 估值数据源元信息 | ✅ 活跃 |
 | `funds_meta` | 3 | 缓存 TTL 标记 | ✅ 活跃 |
 
@@ -175,6 +176,44 @@
 **典型 name 示例**: `000922`（中证红利）、`000016`（上证50）
 **典型 metric 示例**: `pe`, `pb`, `close`, `dividend_yield_中证红利`
 **TTL**: 2 天（`is_series_fresh` 检查）
+
+---
+
+## `index_name_map` — 跟踪标的名称→指数代码映射
+
+**用途**: 将 `fund_profile.跟踪标的`（中文名称）解析为 CSI 指数代码，用于指数价格 MA（Level 2）策略。
+
+**来源**: `tools/build_index_name_map.py`（一次性种子生成，后续按需更新）
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| `display_name` | TEXT PK | 归一化后的指数名称（去掉"指数"/"(价格)"后缀），如 `沪深300` |
+| `index_code` | TEXT NOT NULL | 指数数字代码，如 `000300` |
+| `market_prefix` | TEXT | 市场标识：`sh` 上交所 / `sz` 深交所 / `csi` 中证 / `bj` 北交所 — 用于 `stock_zh_index_daily_em` 后备 |
+| `source` | TEXT | 数据源：`csindex`（中证指数官网）/ `daily_em`（东方财富，国证系列后备） |
+| `index_type` | TEXT NOT NULL | 指数类型：`equity`（权益，适用均线策略）/ `bond` / `commodity` / `overseas` |
+
+### 构建逻辑
+
+```
+build_index_name_map.py:
+  1. 读取 fund_profile 的全部 688 个唯一 跟踪标的
+  2. 非权益关键词过滤（中债/标普/纳斯达克/恒生等 → index_type 分类）
+   3. 名称归一化（去掉"指数""(价格)"及 `人民币`/`港元`/`美元`/`港币` 货币后缀）
+   4. 四级匹配（优先级从高到低）：
+      4a. KNOWN_MAP 手工兜底表（1条：上海金非权益）
+      4b. csi_export.get_equity_name_map()（中证指数官网导出接口，5,471 条 equity 映射）
+      4c. cnindex_export.get_equity_name_map()（国证指数官网导出接口，3,390 条 equity 映射，补深证/国证系列）
+      4d. ak.index_stock_info() 精确匹配（数据源：聚宽 joinquant）
+   5. 匹配结果写入 index_name_map
+   6. 输出报告
+```
+
+> CSI 官网导出接口覆盖 中证/上证/沪深 系列（1847 条股票类）。国证官网导出接口覆盖 深证/国证 系列（1212 条股票类），两者互补。聚宽作为最终兜底。CNINDEX name_map 构建使用 `setdefault` 防止货币变体覆盖标准版代码。
+
+当前覆盖：**477 条 equity**（常用宽基+行业+主题+沪港深指数），**44 条**无法匹配的偏门指数自动回退 acc_nav（Level 3）。
+
+> 完整映射报告见 `docs/index_name_map_report.md`，可通过 `PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py` 重新生成。
 
 ---
 

@@ -67,6 +67,17 @@ funds_meta = Table(
     Column("updated_at", Float),
 )
 
+index_name_map = Table(
+    "index_name_map",
+    metadata,
+    Column("display_name", String, nullable=False),   # 归一化名称
+    Column("index_code", String, nullable=False),       # 数字代码
+    Column("market_prefix", String),                     # "sh"/"sz"/"csi" 用于 daily_em 后备
+    Column("source", String),                            # "csindex"/"daily_em"/"manual"
+    Column("index_type", String, nullable=False),        # "equity"/"bond"/"commodity"/"overseas"
+    PrimaryKeyConstraint("display_name"),
+)
+
 fund_fee = Table(
     "fund_fee",
     metadata,
