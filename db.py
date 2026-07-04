@@ -71,6 +71,7 @@ index_name_map = Table(
     "index_name_map",
     metadata,
     Column("display_name", String, nullable=False),   # 归一化名称
+    Column("short_name", String),                       # 指数简称（原始）
     Column("index_code", String, nullable=False),       # 数字代码
     Column("market_prefix", String),                     # "sh"/"sz"/"csi" 用于 daily_em 后备
     Column("source", String),                            # "csindex"/"daily_em"/"manual"

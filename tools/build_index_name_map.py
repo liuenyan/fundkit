@@ -167,7 +167,7 @@ def match_via_index_stock(normalized: str, stock_map: dict[str, str],
     return None
 
 
-def build_all_mappings() -> tuple[list[dict], list[dict], list[dict]]:
+def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict], list[dict]]:
     """
     返回 (success, failed_verify, skipped) 三条记录列表。
     每条记录含 {display_name, tracking_target, index_code, ...}
@@ -188,7 +188,7 @@ def build_all_mappings() -> tuple[list[dict], list[dict], list[dict]]:
 
     # 数据源 1：中证指数官网导出接口（主数据源，~1847 条 equity 指数）
     try:
-        csi_name_map = get_csi_name_map()  # {display_name: (code, prefix)}
+        csi_name_map = get_csi_name_map()  # {display_name: (code, prefix, short_name)}
         logger.info("CSI 官网映射: %d 条可用", len(csi_name_map))
     except Exception as exc:
         logger.warning("CSI 导出失败: %s", exc)
@@ -196,7 +196,7 @@ def build_all_mappings() -> tuple[list[dict], list[dict], list[dict]]:
 
     # 数据源 2：国证指数官网导出接口（深证/国证系列，~1212 条 equity 指数）
     try:
-        cnindex_name_map = get_cnindex_name_map()  # {display_name: (code, prefix)}
+        cnindex_name_map = get_cnindex_name_map()  # {display_name: (code, prefix, short_name)}
         logger.info("国证官网映射: %d 条可用", len(cnindex_name_map))
     except Exception as exc:
         logger.warning("国证导出失败: %s", exc)
@@ -217,6 +217,7 @@ def build_all_mappings() -> tuple[list[dict], list[dict], list[dict]]:
         # 优先 KNOWN_MAP
         if n in KNOWN_MAP:
             code, prefix, source, mapped_type = KNOWN_MAP[n]
+            short_name = n
             # 记录 跳过非 equity（不验证 — 只需确认不要误写入 price 缓存）
             if mapped_type != "equity":
                 skipped.append({
@@ -243,15 +244,17 @@ def build_all_mappings() -> tuple[list[dict], list[dict], list[dict]]:
 
             # 1) CSI 官网精确匹配
             if n in csi_name_map:
-                code, prefix = csi_name_map[n]
+                code, prefix, short_name = csi_name_map[n]
 
             # 2) 国证官网精确匹配
             if code is None and n in cnindex_name_map:
-                code, prefix = cnindex_name_map[n]
+                code, prefix, short_name = cnindex_name_map[n]
 
             # 3) 聚宽精确匹配
             if code is None:
                 code = match_via_index_stock(n, stock_map, stock_map_normalized)
+                if code:
+                    short_name = n
 
             if code is None:
                 failed.append({
@@ -282,19 +285,21 @@ def build_all_mappings() -> tuple[list[dict], list[dict], list[dict]]:
 
         # 验证（仅记录结果，不阻止写入——运行时 API 失败会回退 acc_nav）
         verified_ok = True
-        if source == "csindex":
-            ok = _verify_csindex(code)
-            if not ok:
-                em_prefix = "sh" if code[0] in ("0", "H", "9") else "sz" if code[0] == "3" else "csi"
-                if _verify_daily_em(em_prefix, code):
-                    source = "daily_em"
-                    prefix = em_prefix
-        elif source == "daily_em":
-            verified_ok = _verify_daily_em(prefix, code)
+        if not skip_verify:
+            if source == "csindex":
+                ok = _verify_csindex(code)
+                if not ok:
+                    em_prefix = "sh" if code[0] in ("0", "H", "9") else "sz" if code[0] == "3" else "csi"
+                    if _verify_daily_em(em_prefix, code):
+                        source = "daily_em"
+                        prefix = em_prefix
+            elif source == "daily_em":
+                verified_ok = _verify_daily_em(prefix, code)
 
         success.append({
             "tracking_target": target,
             "display_name": n,
+            "short_name": short_name,
             "index_code": code,
             "market_prefix": prefix,
             "source": source,
@@ -311,6 +316,7 @@ def write_to_db(records: list[dict]) -> int:
         data = [
             {
                 "display_name": r["display_name"],
+                "short_name": r.get("short_name"),
                 "index_code": r["index_code"],
                 "market_prefix": r.get("market_prefix"),
                 "source": r.get("source"),
@@ -372,6 +378,7 @@ def print_report(success: list[dict], failed: list[dict], skipped: list[dict]) -
 def main() -> None:
     parser = argparse.ArgumentParser(description="构建指数名称→代码映射表")
     parser.add_argument("--dry-run", action="store_true", help="仅预览，不写入")
+    parser.add_argument("--no-verify", action="store_true", help="跳过 API 验证")
     args = parser.parse_args()
 
     db.init_db()
@@ -380,7 +387,7 @@ def main() -> None:
     with db_engine.begin() as conn:
         conn.execute(db.index_name_map.delete())
 
-    success, failed, skipped = build_all_mappings()
+    success, failed, skipped = build_all_mappings(skip_verify=args.no_verify)
 
     if not args.dry_run:
         n = write_to_db(success)

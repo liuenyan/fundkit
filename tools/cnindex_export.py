@@ -64,22 +64,22 @@ def fetch_cnindex_list(force: bool = False) -> pd.DataFrame:
     return df
 
 
-def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, str]]:
-    """构建股票类指数名称→(代码, 市场前缀) 映射。
+def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, str, str]]:
+    """构建股票类指数名称→(代码, 市场前缀, 指数简称) 映射。
 
     映射来源：
       - 指数简称（如 "深证成指"）
       - 指数全称去掉后缀后归一化（如 "深证成份"）
 
     Returns:
-        {display_name: (index_code, market_prefix)}
+        {display_name: (index_code, market_prefix, short_name)}
     """
     if df is None:
         df = fetch_cnindex_list()
     stock = df[df["资产类别"] == "股票"].copy()
     logger.info("股票类指数: %s 条", len(stock))
 
-    name_map: dict[str, Tuple[str, str]] = {}
+    name_map: dict[str, Tuple[str, str, str]] = {}
     for _, row in stock.iterrows():
         code = str(row["指数代码"]).strip()
         series = str(row["指数系列"]) if pd.notna(row["指数系列"]) else ""
@@ -100,16 +100,16 @@ def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, 
         full = str(row["指数全称"]).strip() if pd.notna(row["指数全称"]) else ""
 
         if short:
-            name_map[short] = (code, prefix)
+            name_map[short] = (code, prefix, short)
         if full:
-            name_map[full] = (code, prefix)
+            name_map[full] = (code, prefix, short)
             # 全称去"指数"后缀
             stripped = full[:-2] if full.endswith("指数") else full
-            name_map[stripped] = (code, prefix)
+            name_map[stripped] = (code, prefix, short)
             # 全称归一化（保留首次匹配，避免货币变体覆盖标准版）
             normalized = _normalize(full)
             if normalized not in name_map:
-                name_map[normalized] = (code, prefix)
+                name_map[normalized] = (code, prefix, short)
 
     logger.info("名称→代码映射: %s 条", len(name_map))
     return name_map
