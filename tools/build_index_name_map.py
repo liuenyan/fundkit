@@ -96,6 +96,9 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
     # CSI 只有"上证科创板新能源"（无"主题"）
     "上证科创板新能源主题": ("000692", "sh", "csindex", "equity", "科创新能"),
 
+    # CNINDEX 只有"创业板中盘200指数"（fund 缺"中盘"）
+    "创业板200":         ("399019", "sz", "csindex", "equity", "创业200"),
+
     # 非权益
     "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
 }

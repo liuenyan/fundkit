@@ -99,7 +99,7 @@ main()
 - `tools/build_index_name_map.py`: `index_name_map` 表构建器，映射率从 103/367 (22%) 提升至 485/36 (93%)
   - 匹配优先级：`KNOWN_MAP`(6) → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx），含归一化 fallback（解决"中证180 ESG指数" vs "中证180ESG" 等空格/后缀不一致）
   - `normalize()` 自动剥离 `人民币`/`港元`/`美元`/`港币` 货币后缀；兼容全角+半角混合括号
-  - KNOWN_MAP 保留 6 条数据源无法覆盖的条目（上证科创板新能源主题、国证新能源汽车、中证800有色、中证细分化工产业主题全收益、责任、上海金）
+  - KNOWN_MAP 保留 7 条数据源无法覆盖的条目（上证科创板新能源主题、国证新能源汽车、中证800有色、中证细分化工产业主题全收益、创业板200、责任、上海金）
   - 运行时 API 失败回退 `acc_nav`
   - 聚宽（index_stock_info）已移除：0% 唯一贡献
 - `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
