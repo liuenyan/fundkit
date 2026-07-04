@@ -2,7 +2,7 @@
 
 ## 背景
 
-目前 `index_name_map` 覆盖中证 + 国证两体系共 485 条权益指数。
+目前 `index_name_map` 覆盖中证 + 国证 + 海外共 491 条权益指数。
 35 条失败项中大部分为海外指数（恒生系列、标普系列、纳斯达克、日经、富时等），
 本方案规划海外指数的代码映射与价格数据获取。
 
@@ -90,33 +90,22 @@ source 标记新增类型 `sina_hk` 和 `sina_us`。`market_prefix` 设为 `None
 "道琼斯工业平均":   (".DJI", None, "sina_us", "equity", "道琼斯"),
 ```
 
-### Step 2：dca_backtest.py 新增 Sina 数据源路由
+### Step 2：实现统一取价入口 index_fetcher.py
+
+已在 `backend/index_fetcher.py` 实现：
 
 ```python
-def _fetch_index_close(code, source):
-    if source == 'sina_hk':
-        return _fetch_from_sina_hk(code)
-    elif source == 'sina_us':
-        return _fetch_from_sina_us(code)
-    else:
-        return _fetch_from_csindex_or_daily(code)
+def fetch_index_price(index_code: str, source: str) -> pd.DataFrame | None:
+    return get_or_update_series(index_code, "price", source,
+                                 lambda: _fetch(source, index_code))[0]
 ```
 
-实现两个私有函数：
+内部按 source 路由：
+- `source="csindex"` → `stock_zh_index_hist_csindex(index_code)`
+- `source="sina_hk"` → `stock_hk_index_daily_sina(index_code)`
+- `source="sina_us"` → `index_us_stock_sina(index_code)`
 
-```python
-def _fetch_from_sina_hk(symbol: str) -> pd.DataFrame:
-    df = ak.stock_hk_index_daily_sina(symbol=symbol)
-    out = df[['date', 'close']].dropna().copy()
-    out.columns = ['date', 'value']
-    return out
-
-def _fetch_from_sina_us(symbol: str) -> pd.DataFrame:
-    df = ak.index_us_stock_sina(symbol=symbol)
-    out = df[['date', 'close']].dropna().copy()
-    out.columns = ['date', 'value']
-    return out
-```
+价格数据缓存于 `index_series` 表，`index_code` 列统一用裸码。
 
 ### Step 3：P1 仅代码映射
 
@@ -130,10 +119,9 @@ KNOWN_MAP 新增，source 标记 `accnav`，运行时直接回退基金自身 ac
 ## 数据源分布预期
 
 ```
-现有:   csindex=485
-P0后:   csindex=485 + sina_hk=3 + sina_us=2 = 490
-P1后:   csindex=485 + sina_hk=3 + sina_us=2 + accnav≈15 = ~500
-最终:   csindex=485 + sina_hk=3 + sina_us=2 + accnav≈15 → 失败≈15
+现有:   csindex=486 + sina_hk=3 + sina_us=2 = 491
+P1后:   csindex=486 + sina_hk=3 + sina_us=2 + accnav≈15 = ~500
+最终:   csindex=486 + sina_hk=3 + sina_us=2 + accnav≈15 → 失败≈15
 ```
 
 ## 风险

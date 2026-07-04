@@ -28,6 +28,7 @@ from backend.dca_backtest import (
     simulate_dca,
     calc_lumpsum,
 )
+from backend.index_fetcher import fetch_index_price, lookup_index
 from backend.strategy import (
     FixedBuyStrategy,
     MovingAverageBuyStrategy,
@@ -50,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--freq", choices=["daily", "weekly", "biweekly", "monthly"], default="monthly")
     p.add_argument("--fee", type=float, default=0.0015, help="申购费率 (默认 0.0015)")
     p.add_argument("--ma-period", type=int, default=250, help="均线周期 (默认 250)")
+    p.add_argument("--index-ma", action="store_true", help="【均线策略】使用跟踪指数收盘价替代基金净值")
     p.add_argument("--va-target", type=float, default=1000, help="价值平均目标增长额 (默认 1000)")
     p.add_argument("--va-max-multiple", type=float, default=4.0, help="价值平均最大倍数 (默认 4)")
     p.add_argument("--va-min-amount", type=float, default=10.0, help="价值平均最低申购 (默认 10)")
@@ -91,7 +93,8 @@ def run_backtest(fund_code: str, start: str, end: str, amount: float, fee: float
                  ma_period: int = 250,
                  va_target: float = 1000,
                  va_max_multiple: float = 4.0,
-                 va_min_amount: float = 10.0) -> dict:
+                 va_min_amount: float = 10.0,
+                 index_ma: bool = False) -> dict:
     """运行单个回测，返回指标字典"""
     nav_df = fetch_fund_data(fund_code, start, end)
     dividend_df = fetch_dividend_data(fund_code)
@@ -102,12 +105,29 @@ def run_backtest(fund_code: str, start: str, end: str, amount: float, fee: float
     elif strategy == "va":
         buy = ValueAveragingBuyStrategy(va_target, va_max_multiple, va_min_amount, fee)
     elif strategy == "ma":
-        extra = load_ma_buffer(fund_code, start)
-        if extra is not None:
-            ma_nav = pd.concat([extra, nav_df], ignore_index=True)
-            ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+        if index_ma:
+            profile = db.fund_profile.load([fund_code])
+            tracking_target = profile.get(fund_code, {}).get("跟踪标的")
+            index_info = lookup_index(tracking_target) if tracking_target else None
+            if index_info:
+                idx_code, src, mkt_prefix = index_info
+                price_df = fetch_index_price(idx_code, src, mkt_prefix)
+                if price_df is not None and not price_df.empty:
+                    ma_nav = price_df.rename(columns={"value": "acc_nav"})
+                    ma_nav["date"] = pd.to_datetime(ma_nav["date"])
+                else:
+                    print(f"  ⚠ {fund_code} 指数价格获取失败，回退基金净值")
+                    ma_nav = nav_df
+            else:
+                print(f"  ⚠ {fund_code} 跟踪标的 '{tracking_target}' 未映射，回退基金净值")
+                ma_nav = nav_df
         else:
-            ma_nav = nav_df
+            extra = load_ma_buffer(fund_code, start)
+            if extra is not None:
+                ma_nav = pd.concat([extra, nav_df], ignore_index=True)
+                ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+            else:
+                ma_nav = nav_df
         buy = MovingAverageBuyStrategy(amount, ma_period, fee, ma_nav)
 
     detail, events, redeem_fee, final_val = simulate_dca(nav_df, invest_dates, buy,
@@ -243,6 +263,7 @@ def main() -> None:
                     va_target=args.va_target,
                     va_max_multiple=args.va_max_multiple,
                     va_min_amount=args.va_min_amount,
+                    index_ma=args.index_ma,
                 )
             except BacktestError as e:
                 print(f"跳过 {fund_code} {scenario_name}({start}): {e}", file=sys.stderr)
@@ -267,6 +288,7 @@ def main() -> None:
                             va_target=args.va_target,
                             va_max_multiple=args.va_max_multiple,
                             va_min_amount=args.va_min_amount,
+                            index_ma=args.index_ma,
                         )
                     except BacktestError as e:
                         print(f"跳过 {fund_code} {scenario_name} {sname}: {e}", file=sys.stderr)

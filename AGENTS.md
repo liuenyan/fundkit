@@ -81,6 +81,11 @@ main()
 
 # 策略B: 停投持有+移动止盈
 --stop-invest 0.20 --trailing-stop 0.08
+
+# 均线策略（基金净值）
+--ma-period 250
+# 均线策略（跟踪指数收盘价，无需缓冲期）
+--ma-period 60 --index-ma
 ```
 
 ## Progress / TODO
@@ -108,6 +113,10 @@ main()
 - `tools/cnindex_export.py`: 国证指数官网 xlsx 导出 (`cnindex.com.cn`)，返回 1,384 条指数（1,212 条股票类），补深证/国证系列。本地 CSV 缓存 `data/cnindex_index_list.csv`
 - `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
 - `docs/overseas_index_mapping.md`: 海外指数映射方案文档，定义三层映射策略：P0(Sina价格源) / P1(代码映射+acc_nav回退) / P2(不处理)。已落地 5 条 P0（恒生×3 + 美股×2），mapping 从 486→491
+- **`index_series` + `cache_meta` 列改名**：`name` → `index_code`，统一用裸代码（`000300` / `HSI` / `.NDX`）作主键，解决中文名碰撞问题。已有 ~74K 行迁移完成
+- **`backend/index_fetcher.py`**：统一取价入口，`lookup_index()` 解析跟踪标→index_code+source，`fetch_index_price()` 按 source 路由到 csindex/sina_hk/sina_us API，缓存复用 `index_series.metric="price"`
+- **`index_valuation.py` 适配**：CONFIG 新增 `code` 字段，`_get_series()` 用 `index_code` 作缓存 key（pe/pb/price 统一）
+- **CLI `--index-ma`**：MA 策略支持 `--ma-period 60 --index-ma` 使用跟踪指数收盘价计算均线，无需额外缓冲期。已实测 000071（恒生指数）端到端工作
 
 ## Quirks
 

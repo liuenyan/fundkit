@@ -42,21 +42,21 @@ metadata = MetaData()
 index_series = Table(
     "index_series",
     metadata,
-    Column("name", String, nullable=False),
+    Column("index_code", String, nullable=False),
     Column("metric", String, nullable=False),
     Column("date", String, nullable=False),
     Column("value", Float),
-    PrimaryKeyConstraint("name", "metric", "date"),
+    PrimaryKeyConstraint("index_code", "metric", "date"),
 )
 
 cache_meta = Table(
     "cache_meta",
     metadata,
-    Column("name", String, nullable=False),
+    Column("index_code", String, nullable=False),
     Column("metric", String, nullable=False),
     Column("last_updated", String, nullable=False),
     Column("source", String),
-    PrimaryKeyConstraint("name", "metric"),
+    PrimaryKeyConstraint("index_code", "metric"),
 )
 
 funds_meta = Table(
@@ -446,18 +446,18 @@ def init_db() -> None:
 # ── 估值序列缓存 ──
 
 
-def load_series(name: str, metric: str) -> pd.DataFrame:
+def load_series(index_code: str, metric: str) -> pd.DataFrame:
     return pd.read_sql_query(
-        "SELECT date, value FROM index_series WHERE name=? AND metric=? ORDER BY date",
+        "SELECT date, value FROM index_series WHERE index_code=? AND metric=? ORDER BY date",
         engine,
-        params=(name, metric),
+        params=(index_code, metric),
     )
 
 
-def upsert_series(name: str, metric: str, df: pd.DataFrame) -> None:
+def upsert_series(index_code: str, metric: str, df: pd.DataFrame) -> None:
     with engine.begin() as conn:
         data = [
-            {"name": name, "metric": metric, "date": str(row["date"]), "value": float(row["value"])}
+            {"index_code": index_code, "metric": metric, "date": str(row["date"]), "value": float(row["value"])}
             for _, row in df.iterrows()
         ]
         conn.execute(
@@ -466,39 +466,39 @@ def upsert_series(name: str, metric: str, df: pd.DataFrame) -> None:
         )
 
 
-def get_series_last_date(name: str, metric: str) -> str | None:
+def get_series_last_date(index_code: str, metric: str) -> str | None:
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT MAX(date) FROM index_series WHERE name=:name AND metric=:metric"),
-            {"name": name, "metric": metric},
+            text("SELECT MAX(date) FROM index_series WHERE index_code=:index_code AND metric=:metric"),
+            {"index_code": index_code, "metric": metric},
         ).fetchone()
         return row[0] if row and row[0] else None
 
 
-def get_cache_meta(name: str, metric: str) -> Any:
+def get_cache_meta(index_code: str, metric: str) -> Any:
     with engine.connect() as conn:
         return conn.execute(
-            text("SELECT * FROM cache_meta WHERE name=:name AND metric=:metric"),
-            {"name": name, "metric": metric},
+            text("SELECT * FROM cache_meta WHERE index_code=:index_code AND metric=:metric"),
+            {"index_code": index_code, "metric": metric},
         ).fetchone()
 
 
-def set_cache_meta(name: str, metric: str, source: str) -> None:
+def set_cache_meta(index_code: str, metric: str, source: str) -> None:
     today = date.today().isoformat()
     with engine.begin() as conn:
         conn.execute(
             cache_meta.insert().prefix_with("OR REPLACE"),
-            {"name": name, "metric": metric, "last_updated": today, "source": source},
+            {"index_code": index_code, "metric": metric, "last_updated": today, "source": source},
         )
 
 
-def is_series_fresh(name: str, metric: str, max_age_days: int = 2) -> bool:
-    last = get_series_last_date(name, metric)
+def is_series_fresh(index_code: str, metric: str, max_age_days: int = 2) -> bool:
+    last = get_series_last_date(index_code, metric)
     if last is not None:
         last_date = datetime.strptime(last, "%Y-%m-%d").date()
         if (datetime.now().date() - last_date).days <= max_age_days:
             return True
-    meta = get_cache_meta(name, metric)
+    meta = get_cache_meta(index_code, metric)
     if meta and meta.last_updated:
         meta_date = datetime.strptime(meta.last_updated, "%Y-%m-%d").date()
         if (datetime.now().date() - meta_date).days <= 1:

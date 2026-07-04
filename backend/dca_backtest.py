@@ -18,6 +18,7 @@ import pandas as pd
 
 from backend.charting import create_chart
 from backend.em_fetcher import fetch_nav_data
+from backend.index_fetcher import fetch_index_price, lookup_index
 from tools.stats import calc_annualized, max_drawdown
 from backend.strategy import (
     BuyStrategy,
@@ -108,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--va-min-amount", type=float, default=10.0, help="【价值平均】最低申购金额 (默认 10 元)")
 
     p.add_argument("--ma-period", type=int, default=0, help="【均线策略】均线周期 (如 250，>0 启用均线策略，忽略 --value-avg)")
+    p.add_argument("--index-ma", action="store_true", help="【均线策略】使用跟踪指数收盘价替代基金净值计算均线")
     return p.parse_args()
 
 
@@ -570,21 +572,44 @@ def main() -> None:
 
         # 构造策略对象
         if args.ma_period > 0:
-            # 加载 start_date 之前的净值用于均线计算（回测第1年不缺均线）
-            ma_start = (pd.Timestamp(args.start) - pd.Timedelta(days=args.ma_period * 2)).strftime("%Y-%m-%d")
-            try:
-                extra = db.fund_nav_history.load(args.fund, ma_start, args.start)
-                if extra is not None and not extra.empty:
-                    extra["date"] = pd.to_datetime(extra["净值日期"])
-                    extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
-                    extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
-                    extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
-                    ma_nav = pd.concat([extra, nav_df], ignore_index=True)
-                    ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+            if args.index_ma:
+                # 获取跟踪标的 → index_code + source → 指数收盘价
+                profile = db.fund_profile.load([args.fund])
+                tracking_target = profile.get(args.fund, {}).get("跟踪标的")
+                if tracking_target:
+                    index_info = lookup_index(tracking_target)
                 else:
+                    index_info = None
+                if index_info:
+                    idx_code, src, mkt_prefix = index_info
+                    print(f"使用指数价格计算均线: {tracking_target} ({idx_code}, {src})")
+                    price_df = fetch_index_price(idx_code, src, mkt_prefix)
+                    if price_df is not None and not price_df.empty:
+                        price_df = price_df.rename(columns={"value": "acc_nav"})
+                        price_df["date"] = pd.to_datetime(price_df["date"])
+                        ma_nav = price_df
+                    else:
+                        print("指数价格获取失败，回退基金净值")
+                        ma_nav = nav_df
+                else:
+                    print(f"跟踪标的 '{tracking_target}' 未映射，回退基金净值")
                     ma_nav = nav_df
-            except Exception:
-                ma_nav = nav_df
+            else:
+                # 加载 start_date 之前的净值用于均线计算（回退基金净值）
+                ma_start = (pd.Timestamp(args.start) - pd.Timedelta(days=args.ma_period * 2)).strftime("%Y-%m-%d")
+                try:
+                    extra = db.fund_nav_history.load(args.fund, ma_start, args.start)
+                    if extra is not None and not extra.empty:
+                        extra["date"] = pd.to_datetime(extra["净值日期"])
+                        extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
+                        extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
+                        extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
+                        ma_nav = pd.concat([extra, nav_df], ignore_index=True)
+                        ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+                    else:
+                        ma_nav = nav_df
+                except Exception:
+                    ma_nav = nav_df
             buy_strategy = MovingAverageBuyStrategy(args.amount, args.ma_period, args.fee, ma_nav)
         elif args.value_avg > 0:
             buy_strategy = ValueAveragingBuyStrategy(

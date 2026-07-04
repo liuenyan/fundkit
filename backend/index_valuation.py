@@ -52,6 +52,7 @@ def _fetch(source: str, metric: str, param: str) -> pd.DataFrame | None:
 CONFIG = [
     {
         "name": "沪深300",
+        "code": "000300",
         "source": "csindex",
         "param": "000300",
         "pb": True,
@@ -60,17 +61,19 @@ CONFIG = [
     },
     {
         "name": "中证500",
+        "code": "000905",
         "source": "csindex",
         "param": "000905",
         "pb": True,
         "pb_source": "index_lg",
         "pb_param": "中证500",
     },
-    {"name": "中证红利", "source": "csindex", "param": "000922"},
-    {"name": "红利低波", "source": "csindex", "param": "H30269"},
-    {"name": "CS消费50", "source": "csindex", "param": "931139"},
+    {"name": "中证红利", "code": "000922", "source": "csindex", "param": "000922"},
+    {"name": "红利低波", "code": "H30269", "source": "csindex", "param": "H30269"},
+    {"name": "CS消费50", "code": "931139", "source": "csindex", "param": "931139"},
     {
         "name": "创业板50",
+        "code": "399673",
         "source": "index_lg",
         "param": "创业板50",
         "pb": True,
@@ -104,7 +107,7 @@ def rolling_percentile(df: pd.DataFrame, window_days: int, min_periods: int = 60
 # ── 缓存感知的数据获取 ──
 
 
-def get_or_update_series(name: str, metric: str, source: str, fetch_fn: Callable[[], pd.DataFrame | None]) -> tuple[pd.DataFrame | None, bool]:
+def get_or_update_series(index_code: str, metric: str, source: str, fetch_fn: Callable[[], pd.DataFrame | None]) -> tuple[pd.DataFrame | None, bool]:
     """
     返回 (DataFrame, 是否命中缓存)。
 
@@ -113,8 +116,8 @@ def get_or_update_series(name: str, metric: str, source: str, fetch_fn: Callable
     """
     db.init_db()
 
-    if db.is_series_fresh(name, metric):
-        df = db.load_series(name, metric)
+    if db.is_series_fresh(index_code, metric):
+        df = db.load_series(index_code, metric)
         return df, True
 
     try:
@@ -122,14 +125,14 @@ def get_or_update_series(name: str, metric: str, source: str, fetch_fn: Callable
     except Exception:
         df_raw = None
     if df_raw is None or df_raw.empty:
-        db.set_cache_meta(name, metric, source + ":failed")
-        cached = db.load_series(name, metric)
+        db.set_cache_meta(index_code, metric, source + ":failed")
+        cached = db.load_series(index_code, metric)
         return cached, True
 
-    db.upsert_series(name, metric, df_raw)
-    db.set_cache_meta(name, metric, source)
+    db.upsert_series(index_code, metric, df_raw)
+    db.set_cache_meta(index_code, metric, source)
 
-    df = db.load_series(name, metric)
+    df = db.load_series(index_code, metric)
     return df, False
 
 
@@ -138,14 +141,14 @@ def clear_cache() -> None:
 
 
 def _get_series(cfg: dict[str, Any], metric: str = "pe") -> tuple[pd.DataFrame | None, bool]:
-    name = cfg["name"]
+    index_code = cfg.get("code", cfg["param"])
     if metric == "pb":
         source = cfg.get("pb_source", cfg["source"])
-        param = cfg.get("pb_param", cfg["param"])
+        api_param = cfg.get("pb_param", cfg["param"])
     else:
         source = cfg["source"]
-        param = cfg["param"]
-    return get_or_update_series(name, metric, source, lambda: _fetch(source, metric, param))
+        api_param = cfg["param"]
+    return get_or_update_series(index_code, metric, source, lambda: _fetch(source, metric, api_param))
 
 
 # ── 公开接口 ──
@@ -235,7 +238,7 @@ def _fetch_dividend_yield(_: object = None) -> pd.DataFrame | None:
         return None
     payout_ratio = dp1 * pe1 / 100
 
-    pe_df, _ = get_or_update_series("中证红利", "pe", "csindex", lambda: _fetch("csindex", "pe", "000922"))
+    pe_df, _ = get_or_update_series("000922", "pe", "csindex", lambda: _fetch("csindex", "pe", "000922"))
     if pe_df is None or pe_df.empty:
         logger.warning("获取中证红利历史PE失败，无法估算股息率")
         return None
@@ -258,5 +261,5 @@ def fetch_bond_yield_10y() -> pd.DataFrame | None:
 
 
 def fetch_dividend_yield() -> pd.DataFrame | None:
-    df, _ = get_or_update_series("中证红利", "dividend_yield", "csindex_indicator", _fetch_dividend_yield)
+    df, _ = get_or_update_series("000922", "dividend_yield", "csindex_indicator", _fetch_dividend_yield)
     return df if not df.empty else None

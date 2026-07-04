@@ -86,8 +86,8 @@ def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, 
 
         # Determine market_prefix
         if code.startswith("CN"):
-            # CN-prefixed codes are total return indices — may not be fetchable
-            prefix = "csi"
+            # CN-prefixed codes are total return indices — 无免费公开历史价格 API
+            prefix = None
         elif code.startswith("399") and series == "深证系列":
             prefix = "sz"
         elif code.startswith("399"):

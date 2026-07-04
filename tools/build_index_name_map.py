@@ -8,8 +8,6 @@
 
 import argparse
 import logging
-import re
-import time
 from datetime import datetime
 
 import pandas as pd
@@ -82,7 +80,7 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
     # (normalized_name) → (code, market_prefix, source, index_type, short_name)
 
     # CNINDEX 只有"国证新能源车"（无"汽"），聚宽能匹配但已移除
-    "国证新能源汽车":    ("399417", "sz", "csindex", "equity", "新能源车"),
+    "国证新能源汽车":    ("399417", "sz", "daily_em", "equity", "新能源车"),
 
     # CSI 只有"责任指数"（保留"指数"），normalize 后"责任"不匹配
     "责任":              ("000048", "sh", "csindex", "equity", "责任指数"),
@@ -97,7 +95,7 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
     "上证科创板新能源主题": ("000692", "sh", "csindex", "equity", "科创新能"),
 
     # CNINDEX 只有"创业板中盘200指数"（fund 缺"中盘"）
-    "创业板200":         ("399019", "sz", "csindex", "equity", "创业200"),
+    "创业板200":         ("399019", "sz", "daily_em", "equity", "创业200"),
 
     # 非权益
     "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
@@ -151,6 +149,15 @@ def _verify_sina_us(symbol: str) -> bool:
     """验证 index_us_stock_sina 能否返回数据"""
     try:
         df = ak.index_us_stock_sina(symbol=symbol)
+        return df is not None and not df.empty
+    except Exception:
+        return False
+
+
+def _verify_sina_cn(prefix: str, code: str) -> bool:
+    """验证 stock_zh_index_daily (Sina A股) 能否返回数据"""
+    try:
+        df = ak.stock_zh_index_daily(symbol=f"{prefix}{code}")
         return df is not None and not df.empty
     except Exception:
         return False
@@ -268,18 +275,23 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
             # 自动匹配：CSI 官网 → 国证官网
             code = None
             prefix = None
+            match_source = None  # "csi" or "cnindex"
 
             # 1) CSI 官网精确匹配（含归一化 fallback）
             if n in csi_name_map:
                 code, prefix, short_name = csi_name_map[n]
+                match_source = "csi"
             elif n in csi_norm_map:
                 code, prefix, short_name = csi_norm_map[n]
+                match_source = "csi"
 
             # 2) 国证官网精确匹配（含归一化 fallback）
             if code is None and n in cnindex_name_map:
                 code, prefix, short_name = cnindex_name_map[n]
+                match_source = "cnindex"
             elif code is None and n in cnindex_norm_map:
                 code, prefix, short_name = cnindex_norm_map[n]
+                match_source = "cnindex"
 
             if code is None:
                 failed.append({
@@ -291,12 +303,21 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                 })
                 continue
 
-            # 判断 source（CSI 匹配时 prefix 已确定）
+            # 确定数据源：国证匹配的走东财，CSI 匹配的走中证
+            if match_source == "cnindex":
+                source = "daily_em"
+            else:
+                source = "csindex"
+
+            # prefix 兜底（仅当两个匹配源均未提供时）
             if prefix is None:
                 if code.startswith(("000", "001", "H", "9")):
                     prefix = "sh" if code[0] in ("0", "H") else "csi"
                 elif code.startswith("399"):
                     prefix = "sz" if code[0] == "3" else "csi"
+                elif code.startswith("CN"):
+                    # CN 代码无市场前缀，东财直接用裸代码
+                    pass
                 else:
                     failed.append({
                         "tracking_target": target,
@@ -306,7 +327,6 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                         "reason": f"unknown code format: {code}",
                     })
                     continue
-            source = "csindex"
 
         # 验证（仅记录结果，不阻止写入——运行时 API 失败会回退 acc_nav）
         verified_ok = True
@@ -318,6 +338,8 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                     if _verify_daily_em(em_prefix, code):
                         source = "daily_em"
                         prefix = em_prefix
+                    elif code.startswith("399") and _verify_sina_cn(em_prefix, code):
+                        source = "sina_cn"
             elif source == "daily_em":
                 verified_ok = _verify_daily_em(prefix, code)
             elif source == "sina_hk":
