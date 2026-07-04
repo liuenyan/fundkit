@@ -78,17 +78,17 @@ def normalize(name: str) -> str:
 
 # ── 手工兜底映射（数据源无法覆盖的条目）──
 
-KNOWN_MAP: dict[str, tuple[str, str, str, str]] = {
-    # (normalized_name) → (code, market_prefix, source, index_type)
+KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
+    # (normalized_name) → (code, market_prefix, source, index_type, short_name)
 
     # CNINDEX 只有"国证新能源车"（无"汽"），聚宽能匹配但已移除
-    "国证新能源汽车":    ("399417", "sz", "csindex", "equity"),
+    "国证新能源汽车":    ("399417", "sz", "csindex", "equity", "新能源车"),
 
     # CSI 只有"责任指数"（保留"指数"），normalize 后"责任"不匹配
-    "责任":              ("000048", "sh", "csindex", "equity"),
+    "责任":              ("000048", "sh", "csindex", "equity", "责任指数"),
 
     # 非权益
-    "上海金":            ("SHAU", "sh", "daily_em", "commodity"),
+    "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
 }
 
 
@@ -191,8 +191,7 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
 
         # 优先 KNOWN_MAP
         if n in KNOWN_MAP:
-            code, prefix, source, mapped_type = KNOWN_MAP[n]
-            short_name = n
+            code, prefix, source, mapped_type, short_name = KNOWN_MAP[n]
             # 记录 跳过非 equity（不验证 — 只需确认不要误写入 price 缓存）
             if mapped_type != "equity":
                 skipped.append({
