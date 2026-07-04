@@ -97,10 +97,11 @@ main()
 - `fund_nav` 表建成：`基金代码/日期/单位净值/累计净值/日增长率/数据来源/updated_at`，双源采集（`fund_open_fund_daily_em` 23,529 只 + `fund_etf_fund_daily_em` 1,549 只），覆盖 6,349 / 6,490 指数基金 (97.8%)
 - `fetch_all_index_funds()` 重构为本地 SQL JOIN 优先：`fund_nav` 缓存有效时零 API 调用，JOIN `fund_catalog` + `fund_profile` + `fund_fee` + `fund_scale` 四表。支持 `collect_fund_data.py --nav` 独立刷新净值缓存
 - `tools/build_index_name_map.py`: `index_name_map` 表构建器，映射率从 103/367 (22%) 提升至 477/44 (91%)
-  - 匹配优先级：`KNOWN_MAP` → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx）→ 聚宽
+  - 匹配优先级：`KNOWN_MAP`(3) → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx）
   - `normalize()` 自动剥离 `人民币`/`港元`/`美元`/`港币` 货币后缀
-  - KNOWN_MAP 仅保留 1 条数据源无法覆盖的条目（上海金非权益）
+  - KNOWN_MAP 保留 3 条数据源无法覆盖的条目（国证新能源汽车、责任、上海金）
   - 运行时 API 失败回退 `acc_nav`
+  - 聚宽（index_stock_info）已移除：0% 唯一贡献
 - `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
 - `tools/csi_export.py`: 中证指数官网导出接口 (`POST csindex-home/exportExcel/indexAll/CH`)，返回 2,967 条指数（1,847 条股票类）。`get_equity_name_map()` 基于 指数简称 + 指数全称去"指数"后缀构建 5,471 条名称映射。本地 CSV 缓存 `data/csi_index_list.csv`，支持 `--force` 刷新
 - `tools/cnindex_export.py`: 国证指数官网 xlsx 导出 (`cnindex.com.cn`)，返回 1,384 条指数（1,212 条股票类），补深证/国证系列。本地 CSV 缓存 `data/cnindex_index_list.csv`

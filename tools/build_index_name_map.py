@@ -81,6 +81,12 @@ def normalize(name: str) -> str:
 KNOWN_MAP: dict[str, tuple[str, str, str, str]] = {
     # (normalized_name) → (code, market_prefix, source, index_type)
 
+    # CNINDEX 只有"国证新能源车"（无"汽"），聚宽能匹配但已移除
+    "国证新能源汽车":    ("399417", "sz", "csindex", "equity"),
+
+    # CSI 只有"责任指数"（保留"指数"），normalize 后"责任"不匹配
+    "责任":              ("000048", "sh", "csindex", "equity"),
+
     # 非权益
     "上海金":            ("SHAU", "sh", "daily_em", "commodity"),
 }
@@ -140,33 +146,6 @@ def _fetch_close_from_daily_em(prefix: str, code: str) -> pd.DataFrame | None:
         return None
 
 
-def build_index_stock_map() -> dict[str, str]:
-    """从 ak.index_stock_info() 构建 {display_name: index_code}（数据源：聚宽 joinquant）"""
-    df = ak.index_stock_info()
-    # 有重复 display_name 时选短的（沪深300 → 000300 而非 399300）
-    result: dict[str, str] = {}
-    for _, r in df.iterrows():
-        name = r["display_name"]
-        code = r["index_code"]
-        if name not in result or len(code) < len(result[name]):
-            result[name] = code
-    return result
-
-
-def match_via_index_stock(normalized: str, stock_map: dict[str, str],
-                           stock_map_normalized: dict[str, str]) -> str | None:
-    """返回 index_code 或 None（仅接受精确匹配 + 归一化后精确匹配）"""
-    # 1. 精确匹配原始 display_name
-    if normalized in stock_map:
-        return stock_map[normalized]
-
-    # 2. 精确匹配归一化后的 display_name
-    if normalized in stock_map_normalized:
-        return stock_map_normalized[normalized]
-
-    return None
-
-
 def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict], list[dict]]:
     """
     返回 (success, failed_verify, skipped) 三条记录列表。
@@ -202,10 +181,6 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
         logger.warning("国证导出失败: %s", exc)
         cnindex_name_map = {}
 
-    # 数据源 2：聚宽 joinquant（后备）
-    stock_map = build_index_stock_map()
-    stock_map_normalized = {normalize(k): v for k, v in stock_map.items()}
-
     success: list[dict] = []
     failed: list[dict] = []
     skipped: list[dict] = []
@@ -238,7 +213,7 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
             })
             continue
         else:
-            # 自动匹配：CSI 官网 → 国证官网 → 聚宽
+            # 自动匹配：CSI 官网 → 国证官网
             code = None
             prefix = None
 
@@ -249,12 +224,6 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
             # 2) 国证官网精确匹配
             if code is None and n in cnindex_name_map:
                 code, prefix, short_name = cnindex_name_map[n]
-
-            # 3) 聚宽精确匹配
-            if code is None:
-                code = match_via_index_stock(n, stock_map, stock_map_normalized)
-                if code:
-                    short_name = n
 
             if code is None:
                 failed.append({
