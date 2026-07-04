@@ -97,6 +97,12 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
     # CNINDEX 只有"创业板中盘200指数"（fund 缺"中盘"）
     "创业板200":         ("399019", "sz", "daily_em", "equity", "创业200"),
 
+    # tracking_target "深证300价格" → normalize 后为"深证300价格"，不会自动匹配"深证300"
+    "深证300价格":       ("399007", "sz", "daily_em", "equity", "深证300"),
+
+    # tracking_target "香蜜湖金融科技指数(价格)" → normalize 后为"香蜜湖金融科技"
+    "香蜜湖金融科技":     ("399699", "sz", "daily_em", "equity", "金融科技"),
+
     # 非权益
     "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
 
