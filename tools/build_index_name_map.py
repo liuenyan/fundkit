@@ -70,8 +70,8 @@ def normalize(name: str) -> str:
     # 去掉末尾残留括号内容
     if "(" in name and name.endswith(")"):
         name = name[:name.index("(")]
-    # 全角括号也处理
-    if "（" in name and name.endswith("）"):
+    # 全角括号也处理（含全角开头+半角结尾的混合情况）
+    if "（" in name and (name.endswith("）") or name.endswith(")")):
         name = name[:name.index("（")]
     return name.strip()
 
@@ -86,6 +86,12 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
 
     # CSI 只有"责任指数"（保留"指数"），normalize 后"责任"不匹配
     "责任":              ("000048", "sh", "csindex", "equity", "责任指数"),
+
+    # CSI 只有"中证800有色金属"（无"有色"缩写）
+    "中证800有色":       ("H30031", "sh", "csindex", "equity", "800有色"),
+
+    # CSI 只有"中证细分化工产业主题"（无"全收益"版本），回退价格指数
+    "中证细分化工产业主题全收益": ("000813", "sh", "csindex", "equity", "细分化工"),
 
     # CSI 只有"上证科创板新能源"（无"主题"）
     "上证科创板新能源主题": ("000692", "sh", "csindex", "equity", "科创新能"),
