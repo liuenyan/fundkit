@@ -96,10 +96,10 @@ main()
 - `index_fund.py` 从 `fund_profile` 读取 `跟踪方式` 替代 AKShare 硬编码值，兜底名称启发式
 - `fund_nav` 表建成：`基金代码/日期/单位净值/累计净值/日增长率/数据来源/updated_at`，双源采集（`fund_open_fund_daily_em` 23,529 只 + `fund_etf_fund_daily_em` 1,549 只），覆盖 6,349 / 6,490 指数基金 (97.8%)
 - `fetch_all_index_funds()` 重构为本地 SQL JOIN 优先：`fund_nav` 缓存有效时零 API 调用，JOIN `fund_catalog` + `fund_profile` + `fund_fee` + `fund_scale` 四表。支持 `collect_fund_data.py --nav` 独立刷新净值缓存
-- `tools/build_index_name_map.py`: `index_name_map` 表构建器，映射率从 103/367 (22%) 提升至 477/44 (91%)
-  - 匹配优先级：`KNOWN_MAP`(3) → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx）
+- `tools/build_index_name_map.py`: `index_name_map` 表构建器，映射率从 103/367 (22%) 提升至 482/39 (93%)
+  - 匹配优先级：`KNOWN_MAP`(4) → CSI 官网（中证指数导出）→ 国证官网（cnindex.com.cn xlsx），含归一化 fallback（解决"中证180 ESG指数" vs "中证180ESG" 等空格/后缀不一致）
   - `normalize()` 自动剥离 `人民币`/`港元`/`美元`/`港币` 货币后缀
-  - KNOWN_MAP 保留 3 条数据源无法覆盖的条目（国证新能源汽车、责任、上海金）
+  - KNOWN_MAP 保留 4 条数据源无法覆盖的条目（上证科创板新能源主题、国证新能源汽车、责任、上海金）
   - 运行时 API 失败回退 `acc_nav`
   - 聚宽（index_stock_info）已移除：0% 唯一贡献
 - `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）

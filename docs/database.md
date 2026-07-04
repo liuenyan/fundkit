@@ -13,7 +13,7 @@
 | `fund_nav` | 25,333 | 基金最新净值（日频快照） | ✅ 活跃 |
 | `fund_nav_history` | 3,273/基 | 基金全量历史净值（回测缓存） | ✅ 活跃 |
 | `index_series` | 73,742 | 指数估值时序（PE/PB/点位） | ✅ 活跃 |
-| `index_name_map` | 477 | 跟踪标的名称→指数代码映射 | ✅ 活跃 |
+| `index_name_map` | 482 | 跟踪标的名称→指数代码映射 | ✅ 活跃 |
 | `cache_meta` | 17 | 估值数据源元信息 | ✅ 活跃 |
 | `funds_meta` | 3 | 缓存 TTL 标记 | ✅ 活跃 |
 
@@ -211,7 +211,7 @@ build_index_name_map.py:
 
 > CSI 官网导出接口覆盖 中证/上证/沪深 系列（1847 条股票类）。国证官网导出接口覆盖 深证/国证 系列（1212 条股票类），两者互补。聚宽作为最终兜底。CNINDEX name_map 构建使用 `setdefault` 防止货币变体覆盖标准版代码。
 
-当前覆盖：**477 条 equity**（常用宽基+行业+主题+沪港深指数），**44 条**无法匹配的偏门指数自动回退 acc_nav（Level 3）。
+当前覆盖：**482 条 equity**（常用宽基+行业+主题+沪港深指数），**39 条**无法匹配的偏门指数自动回退 acc_nav（Level 3）。
 
 > 完整映射报告见 `docs/index_name_map_report.md`，可通过 `PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py` 重新生成。
 

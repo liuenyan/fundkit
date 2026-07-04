@@ -87,6 +87,9 @@ KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
     # CSI 只有"责任指数"（保留"指数"），normalize 后"责任"不匹配
     "责任":              ("000048", "sh", "csindex", "equity", "责任指数"),
 
+    # CSI 只有"上证科创板新能源"（无"主题"）
+    "上证科创板新能源主题": ("000692", "sh", "csindex", "equity", "科创新能"),
+
     # 非权益
     "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
 }
@@ -181,6 +184,19 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
         logger.warning("国证导出失败: %s", exc)
         cnindex_name_map = {}
 
+    # 构建归一化索引（解决 fund 跟踪标与官方名空格/后缀不一致的差异）
+    csi_norm_map: dict[str, tuple[str, str, str]] = {}
+    for k, v in csi_name_map.items():
+        nk = normalize(k)
+        if nk not in csi_norm_map:
+            csi_norm_map[nk] = v
+
+    cnindex_norm_map: dict[str, tuple[str, str, str]] = {}
+    for k, v in cnindex_name_map.items():
+        nk = normalize(k)
+        if nk not in cnindex_norm_map:
+            cnindex_norm_map[nk] = v
+
     success: list[dict] = []
     failed: list[dict] = []
     skipped: list[dict] = []
@@ -216,13 +232,17 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
             code = None
             prefix = None
 
-            # 1) CSI 官网精确匹配
+            # 1) CSI 官网精确匹配（含归一化 fallback）
             if n in csi_name_map:
                 code, prefix, short_name = csi_name_map[n]
+            elif n in csi_norm_map:
+                code, prefix, short_name = csi_norm_map[n]
 
-            # 2) 国证官网精确匹配
+            # 2) 国证官网精确匹配（含归一化 fallback）
             if code is None and n in cnindex_name_map:
                 code, prefix, short_name = cnindex_name_map[n]
+            elif code is None and n in cnindex_norm_map:
+                code, prefix, short_name = cnindex_norm_map[n]
 
             if code is None:
                 failed.append({
