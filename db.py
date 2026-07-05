@@ -150,10 +150,21 @@ fund_nav_history = Table(
     PrimaryKeyConstraint("基金代码", "日期"),
 )
 
+fund_dividend = Table(
+    "fund_dividend",
+    metadata,
+    Column("基金代码", String, nullable=False),
+    Column("除息日", String, nullable=False),
+    Column("每份分红", Float),
+    Column("updated_at", Float),
+    PrimaryKeyConstraint("基金代码", "除息日"),
+)
+
 CATALOG_TTL = 86400  # 基金名录默认 TTL
 FEE_TTL = 7776000  # 费率缓存 90 天
 SCALE_TTL = 86400  # 规模缓存 24 小时
 NAV_TTL = 86400  # 净值缓存 24 小时
+DIVIDEND_TTL = 7776000  # 分红缓存 90 天
 
 
 # ── OOP 表访问层 ──
@@ -454,6 +465,51 @@ class FundNavHistoryTable:
                 )
 
 
+class FundDividendTable:
+    """分红缓存表——按基金代码存取"""
+
+    table = fund_dividend
+
+    def load(self, fund_code: str, ttl: float | None = None) -> pd.DataFrame | None:
+        try:
+            ttl = ttl or DIVIDEND_TTL
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT MAX(updated_at) FROM fund_dividend WHERE 基金代码=:code"),
+                    {"code": fund_code},
+                ).fetchone()
+                if row and row[0] is not None and time.time() - row[0] < ttl:
+                    df = pd.read_sql_query(
+                        "SELECT 除息日, 每份分红 FROM fund_dividend WHERE 基金代码=? ORDER BY 除息日",
+                        engine,
+                        params=(fund_code,),
+                    )
+                    if not df.empty:
+                        return df
+        except Exception:
+            pass
+        return None
+
+    def save(self, fund_code: str, df: pd.DataFrame) -> None:
+        if df.empty:
+            return
+        with engine.begin() as conn:
+            data = [
+                {
+                    "基金代码": fund_code,
+                    "除息日": str(row["除息日"]),
+                    "每份分红": float(row["每份分红"]),
+                    "updated_at": time.time(),
+                }
+                for _, row in df.iterrows()
+            ]
+            if data:
+                conn.execute(
+                    self.table.insert().prefix_with("OR REPLACE"),
+                    data,
+                )
+
+
 # ── 单例实例 ──
 fund_fee = FundFeeTable()
 fund_scale = FundScaleTable()
@@ -461,6 +517,7 @@ fund_profile = FundProfileTable()
 fund_nav = FundNavTable()
 fund_catalog = FundCatalogTable()
 fund_nav_history = FundNavHistoryTable()
+fund_dividend = FundDividendTable()
 
 
 # ── 初始化 ──

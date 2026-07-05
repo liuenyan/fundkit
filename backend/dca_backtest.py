@@ -171,7 +171,12 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
 
 
 def fetch_dividend_data(fund_code: str) -> pd.DataFrame:
-    """获取基金真实分红事件（天天基金网）"""
+    """获取基金真实分红事件，缓存优先 → 天天基金网 API 兜底"""
+    db.init_db()
+    cached = db.fund_dividend.load(fund_code)
+    if cached is not None:
+        cached["除息日"] = pd.to_datetime(cached["除息日"])
+        return cached
     try:
         df = ak.fund_open_fund_info_em(symbol=fund_code, indicator="分红送配详情", period="成立来")
     except Exception:
@@ -180,7 +185,9 @@ def fetch_dividend_data(fund_code: str) -> pd.DataFrame:
         return pd.DataFrame()
     df["每份分红"] = df["每份分红"].str.extract(r"([\d.]+)").astype(float)
     df["除息日"] = pd.to_datetime(df["除息日"])
-    return df[["除息日", "每份分红"]].sort_values("除息日").reset_index(drop=True)
+    result = df[["除息日", "每份分红"]].sort_values("除息日").reset_index(drop=True)
+    db.fund_dividend.save(fund_code, result)
+    return result
 
 
 def fetch_fund_name(fund_code: str) -> str:
@@ -248,17 +255,6 @@ def build_dividend_dict(dividend_df: pd.DataFrame | None) -> dict[pd.Timestamp, 
     if dividend_df is None or dividend_df.empty:
         return {}
     return dict(zip(dividend_df["除息日"], dividend_df["每份分红"]))
-
-
-def build_dividend_dict_from_nav(nav_df: pd.DataFrame) -> dict[pd.Timestamp, float]:
-    """从 nav_df 的 acc_nav - unit_nav 变化推算分红事件，作为 API 数据兜底"""
-    if "acc_nav" not in nav_df.columns or "unit_nav" not in nav_df.columns:
-        return {}
-    df = nav_df[["date", "acc_nav", "unit_nav"]].dropna().copy()
-    df["cum_div"] = df["acc_nav"] - df["unit_nav"]
-    df["div_change"] = df["cum_div"].diff()
-    div_events = df[df["div_change"] > 1e-8][["date", "div_change"]]
-    return dict(zip(div_events["date"], div_events["div_change"]))
 
 
 def reinvest_dividends(
@@ -364,7 +360,7 @@ def simulate_dca(
 ) -> tuple[pd.DataFrame, list[dict[str, Any]], float, float]:
     """执行定投模拟"""
     nav_dict = nav_df.set_index("date")["unit_nav"].to_dict()
-    dividend_dict = build_dividend_dict(dividend_df) or build_dividend_dict_from_nav(nav_df)
+    dividend_dict = build_dividend_dict(dividend_df)
 
     stop_profit_on = sell_strategy is not None
     invest_set = set(invest_dates)
@@ -464,7 +460,7 @@ def calc_lumpsum(
     first = df.iloc[0]
     actual = amount * (1 - purchase_rate)
     units = actual / first["unit_nav"]
-    dividend_dict = build_dividend_dict(dividend_df) or build_dividend_dict_from_nav(df)
+    dividend_dict = build_dividend_dict(dividend_df)
 
     for _, row in df.iterrows():
         units += reinvest_dividends(units, row["unit_nav"], row["date"], dividend_dict)
