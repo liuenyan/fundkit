@@ -6,6 +6,7 @@
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
 
 import akshare as ak
@@ -93,71 +94,34 @@ def _fetch_one(source: str, code: str, market_prefix: str | None = None) -> pd.D
     return None
 
 
-def _fetch_csindex(code: str) -> pd.DataFrame | None:
-    try:
-        df = ak.stock_zh_index_hist_csindex(
-            symbol=code, start_date="20000101", end_date=_TODAY
-        )
-        if df is None or df.empty or "收盘" not in df.columns:
-            return None
-        out = df[["日期", "收盘"]].dropna().copy()
-        out.columns = ["date", "value"]
-        return out
-    except Exception as exc:
-        logger.warning("csindex 取价失败 %s: %s", code, exc)
-    return None
-
-
-def _fetch_sina_cn(symbol: str) -> pd.DataFrame | None:
-    """使用 Sina stock_zh_index_daily 获取 A 股指数收盘价。"""
-    try:
-        df = ak.stock_zh_index_daily(symbol=symbol)
-        if df is None or df.empty or "close" not in df.columns:
-            return None
-        out = df[["date", "close"]].dropna().copy()
-        out.columns = ["date", "value"]
-        return out
-    except Exception as exc:
-        logger.warning("sina_cn 取价失败 %s: %s", symbol, exc)
+def _fetch_with(
+    api_func: Callable[..., pd.DataFrame],
+    *, date_col: str = "date", close_col: str = "close", **fixed_kwargs: object,
+) -> Callable[[str], pd.DataFrame | None]:
+    """返回一个 (symbol: str) -> pd.DataFrame | None 签名的取价函数。"""
+    def fetcher(symbol: str) -> pd.DataFrame | None:
+        try:
+            df = api_func(symbol=symbol, **fixed_kwargs)
+            if df is None or df.empty or close_col not in df.columns:
+                return None
+            out = df[[date_col, close_col]].dropna().copy()
+            out.columns = ["date", "value"]
+            return out
+        except Exception as exc:
+            logger.warning("取价失败 %s: %s", symbol, exc)
         return None
+    return fetcher
 
 
-def _fetch_sina_hk(symbol: str) -> pd.DataFrame | None:
-    try:
-        df = ak.stock_hk_index_daily_sina(symbol=symbol)
-        if df is None or df.empty or "close" not in df.columns:
-            return None
-        out = df[["date", "close"]].dropna().copy()
-        out.columns = ["date", "value"]
-        return out
-    except Exception as exc:
-        logger.warning("sina_hk 取价失败 %s: %s", symbol, exc)
-        return None
-
-
-def _fetch_sina_us(symbol: str) -> pd.DataFrame | None:
-    try:
-        df = ak.index_us_stock_sina(symbol=symbol)
-        if df is None or df.empty or "close" not in df.columns:
-            return None
-        out = df[["date", "close"]].dropna().copy()
-        out.columns = ["date", "value"]
-        return out
-    except Exception as exc:
-        logger.warning("sina_us 取价失败 %s: %s", symbol, exc)
-        return None
-
-
-def _fetch_daily_em(symbol: str) -> pd.DataFrame | None:
-    try:
-        df = ak.stock_zh_index_daily_em(
-            symbol=symbol, start_date="20000101", end_date=_TODAY
-        )
-        if df is None or df.empty or "close" not in df.columns:
-            return None
-        out = df[["date", "close"]].dropna().copy()
-        out.columns = ["date", "value"]
-        return out
-    except Exception as exc:
-        logger.warning("daily_em 取价失败 %s: %s", symbol, exc)
-        return None
+_fetch_csindex = _fetch_with(
+    ak.stock_zh_index_hist_csindex,
+    date_col="日期", close_col="收盘",
+    start_date="20000101", end_date=_TODAY,
+)
+_fetch_daily_em = _fetch_with(
+    ak.stock_zh_index_daily_em,
+    start_date="20000101", end_date=_TODAY,
+)
+_fetch_sina_cn = _fetch_with(ak.stock_zh_index_daily)
+_fetch_sina_hk = _fetch_with(ak.stock_hk_index_daily_sina)
+_fetch_sina_us = _fetch_with(ak.index_us_stock_sina)
