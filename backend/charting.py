@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from tools.cjk_font import setup_cjk_font
+from backend.cjk_font import setup_cjk_font
 
 
 def create_chart(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str) -> plt.Figure:

@@ -22,7 +22,7 @@ from backend.dca_backtest import (
 from backend.index_fetcher import fetch_index_price, lookup_index
 from backend.strategy import FixedBuyStrategy, MovingAverageBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
 import db
-from tools.stats import calc_annualized, max_drawdown
+from backend.stats import calc_annualized, max_drawdown
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 

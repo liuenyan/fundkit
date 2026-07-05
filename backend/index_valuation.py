@@ -13,7 +13,7 @@ import pandas as pd
 import akshare as ak
 
 import db
-from tools.stats import calc_percentile
+from backend.stats import calc_percentile
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(

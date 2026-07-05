@@ -6,7 +6,7 @@
 import pandas as pd
 import streamlit as st
 
-from tools.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
+from backend.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
 
 from backend.pension_fund import (
     PENSION_CATEGORIES,

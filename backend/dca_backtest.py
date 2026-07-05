@@ -19,7 +19,7 @@ import pandas as pd
 from backend.charting import create_chart
 from backend.em_fetcher import fetch_nav_data
 from backend.index_fetcher import fetch_index_price, lookup_index
-from tools.stats import calc_annualized, max_drawdown
+from backend.stats import calc_annualized, max_drawdown
 from backend.strategy import (
     BuyStrategy,
     DCAPosition,

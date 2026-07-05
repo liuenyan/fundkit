@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from matplotlib.figure import Figure
-from tools.cjk_font import setup_cjk_font
+from backend.cjk_font import setup_cjk_font
 from backend.index_valuation import fetch_all as _fetch_valuation
 from backend.index_valuation import fetch_series_all as _fetch_series
 from backend.index_valuation import fetch_bond_yield_10y, fetch_dividend_yield

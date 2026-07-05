@@ -34,7 +34,7 @@ from backend.strategy import (
     MovingAverageBuyStrategy,
     ValueAveragingBuyStrategy,
 )
-from tools.stats import calc_annualized, max_drawdown
+from backend.stats import calc_annualized, max_drawdown
 from tools.find_scenarios import find_scenarios
 
 
