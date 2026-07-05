@@ -1,6 +1,0 @@
-[console_scripts]
-backtest = backend.dca_backtest:main
-build-name-map = tools.build_index_name_map:main
-collect = collect_fund_data:main
-compare-strategies = tools.compare_strategies:main
-find-scenarios = tools.find_scenarios:main

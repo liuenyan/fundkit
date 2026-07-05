@@ -1,6 +1,0 @@
-app
-app_pages
-backend
-collect_fund_data
-db
-tools

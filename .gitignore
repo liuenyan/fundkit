@@ -1,6 +1,7 @@
 charts/
 .venv/
 .vscode/
+*.egg-info/
 __pycache__/
 *.pyc
 data/
