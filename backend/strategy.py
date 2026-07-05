@@ -49,9 +49,14 @@ class BuyStrategy(ABC):
 class MovingAverageBuyStrategy(BuyStrategy):
     """指数均线策略：偏离均线越远买入越多"""
 
-    # 默认偏差阈值 → 买入倍数（5 档）
     DEFAULT_TIERS = (-0.10, -0.05, 0, 0.05)
     DEFAULT_MULTIPLIERS = (2.0, 1.5, 1.0, 0.5, 0.0)
+
+    MA_MODES: dict[str, tuple[tuple[float, ...], tuple[float, ...]]] = {
+        "default": (DEFAULT_TIERS, DEFAULT_MULTIPLIERS),
+        "aggressive": ((-0.15, -0.08, -0.03, 0.03), (3.0, 2.0, 1.5, 0.5, 0.0)),
+        "conservative": ((-0.08, -0.04, 0, 0.04), (1.5, 1.2, 1.0, 0.8, 0.0)),
+    }
 
     def __init__(
         self,

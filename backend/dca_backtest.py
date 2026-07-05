@@ -114,6 +114,16 @@ def parse_args() -> argparse.Namespace:
         "--ma-period", type=int, default=0, help="【均线策略】均线周期 (如 250，>0 启用均线策略，忽略 --value-avg)"
     )
     p.add_argument("--index-ma", action="store_true", help="【均线策略】使用跟踪指数收盘价替代基金净值计算均线")
+    p.add_argument(
+        "--ma-mode",
+        default="default",
+        choices=list(MovingAverageBuyStrategy.MA_MODES),
+        help="【均线策略】偏离响应模式 (default / aggressive / conservative)",
+    )
+    p.add_argument("--ma-tiers", default=None, help="【均线策略】自定义偏差阈值，逗号分隔 (如 -0.15,-0.08,-0.03,0.03)")
+    p.add_argument(
+        "--ma-multipliers", default=None, help="【均线策略】自定义买入倍数，逗号分隔 (如 3.0,2.0,1.5,0.5,0.0)"
+    )
     return p.parse_args()
 
 
@@ -671,7 +681,14 @@ def main() -> None:
                         ma_nav = nav_df
                 except Exception:
                     ma_nav = nav_df
-            buy_strategy = MovingAverageBuyStrategy(args.amount, args.ma_period, args.fee, ma_nav)
+            ma_tiers, ma_mults = MovingAverageBuyStrategy.MA_MODES.get(
+                args.ma_mode, MovingAverageBuyStrategy.MA_MODES["default"]
+            )
+            if args.ma_tiers is not None:
+                ma_tiers = tuple(float(x) for x in args.ma_tiers.split(","))
+            if args.ma_multipliers is not None:
+                ma_mults = tuple(float(x) for x in args.ma_multipliers.split(","))
+            buy_strategy = MovingAverageBuyStrategy(args.amount, args.ma_period, args.fee, ma_nav, ma_tiers, ma_mults)
         elif args.value_avg > 0:
             buy_strategy = ValueAveragingBuyStrategy(args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
         else:

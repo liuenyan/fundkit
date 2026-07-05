@@ -63,6 +63,9 @@ with st.sidebar:
     va_min_amount = 10.0
     ma_period = 0
     use_index_ma = False
+    ma_mode = "default"
+    ma_tiers_str = ""
+    ma_mults_str = ""
 
     if buy_type == "定期定额":
         amount = st.number_input("每期定投金额（元）", 1.0, 1e8, 1000.0, step=100.0)
@@ -77,6 +80,14 @@ with st.sidebar:
         amount = st.number_input("基础每期金额（元）", 1.0, 1e8, 1000.0, step=100.0)
         ma_period = st.selectbox("均线周期", [120, 250], index=1, help="低于均线多买，高于均线少买")
         use_index_ma = st.checkbox("使用指数收盘价计算均线", True, help="用跟踪指数收盘价替代基金净值，无需缓冲期")
+        ma_mode = st.selectbox(
+            "偏离响应模式",
+            list(MovingAverageBuyStrategy.MA_MODES),
+            format_func=lambda x: {"default": "默认", "aggressive": "激进", "conservative": "保守"}[x],
+        )
+        with st.expander("自定义分档/倍数"):
+            ma_tiers_str = st.text_input("偏差阈值（逗号分隔，如 -0.15,-0.08,-0.03,0.03）", "")
+            ma_mults_str = st.text_input("买入倍数（逗号分隔，如 3.0,2.0,1.5,0.5,0.0）", "")
 
     freq = st.selectbox(
         "定投频率",
@@ -199,7 +210,15 @@ with st.spinner("正在获取数据并计算…"):
                     ma_nav = nav_df
             except Exception:
                 ma_nav = nav_df
-        buy_strategy = MovingAverageBuyStrategy(amount, ma_period, fee / 100, ma_nav)
+        if ma_tiers_str.strip():
+            ma_tiers = tuple(float(x) for x in ma_tiers_str.split(","))
+        else:
+            ma_tiers = MovingAverageBuyStrategy.MA_MODES[ma_mode][0]
+        if ma_mults_str.strip():
+            ma_mults = tuple(float(x) for x in ma_mults_str.split(","))
+        else:
+            ma_mults = MovingAverageBuyStrategy.MA_MODES[ma_mode][1]
+        buy_strategy = MovingAverageBuyStrategy(amount, ma_period, fee / 100, ma_nav, ma_tiers, ma_mults)
     elif buy_type == "价值平均":
         buy_strategy = ValueAveragingBuyStrategy(va_target, va_max_multiple, va_min_amount, fee / 100)
     else:
