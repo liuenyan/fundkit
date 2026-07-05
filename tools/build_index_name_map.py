@@ -284,6 +284,7 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
         index_type = classify_tracking_target(target)
         n = normalize(target)
 
+        short_name = ""
         # 优先 KNOWN_MAP
         if n in KNOWN_MAP:
             code, prefix, source, mapped_type, short_name = KNOWN_MAP[n]

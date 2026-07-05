@@ -139,6 +139,8 @@ def run_backtest(
             else:
                 ma_nav = nav_df
         buy = MovingAverageBuyStrategy(amount, ma_period, fee, ma_nav)
+    else:
+        raise ValueError(f"unknown strategy: {strategy}")
 
     detail, events, redeem_fee, final_val = simulate_dca(nav_df, invest_dates, buy, dividend_df=dividend_df)
     total_invest = detail.iloc[-1]["total_invested"]
