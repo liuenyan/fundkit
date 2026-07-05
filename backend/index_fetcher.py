@@ -84,7 +84,8 @@ def _fetch_one(source: str, code: str, market_prefix: str | None = None) -> pd.D
     elif source == "sina_us":
         return _fetch_sina_us(code)
     elif source == "sina_cn":
-        return _fetch_sina_cn(code, market_prefix)
+        symbol = f"{market_prefix}{code}" if market_prefix else code
+        return _fetch_sina_cn(symbol)
     elif source == "daily_em":
         symbol = f"{market_prefix}{code}" if market_prefix else code
         return _fetch_daily_em(symbol)
@@ -107,9 +108,8 @@ def _fetch_csindex(code: str) -> pd.DataFrame | None:
     return None
 
 
-def _fetch_sina_cn(code: str, market_prefix: str | None = None) -> pd.DataFrame | None:
+def _fetch_sina_cn(symbol: str) -> pd.DataFrame | None:
     """使用 Sina stock_zh_index_daily 获取 A 股指数收盘价。"""
-    symbol = f"{market_prefix}{code}" if market_prefix else code
     try:
         df = ak.stock_zh_index_daily(symbol=symbol)
         if df is None or df.empty or "close" not in df.columns:
