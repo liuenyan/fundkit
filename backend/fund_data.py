@@ -5,13 +5,13 @@
 
 from collections.abc import Callable, Generator
 import concurrent.futures
-import re
 from typing import Any
 
 import pandas as pd
 import akshare as ak
 
 import db
+from backend.parse_utils import parse_pct, parse_scale
 
 SORT_OPTIONS = {
     "默认": None,
@@ -22,33 +22,6 @@ SORT_OPTIONS = {
 }
 
 
-def parse_fee_pct(v: Any) -> float | None:
-    if v is None:
-        return None
-    try:
-        return float(str(v).replace("%", "").replace("（每年）", "").replace(" ", "").strip())
-    except (ValueError, TypeError):
-        return None
-
-
-def _parse_scale(s: Any) -> float | None:
-    if not s:
-        return None
-    s = str(s).strip().replace(",", "")
-    try:
-        if "亿" in s:
-            m = re.search(r"([\d.]+)\s*亿", s)
-            return float(m.group(1)) if m else None
-        if "万" in s:
-            m = re.search(r"([\d.]+)\s*万", s)
-            v = float(m.group(1)) if m else None
-            return round(v / 10000, 4) if v else None
-        m = re.search(r"([\d.]+)", s)
-        return float(m.group(1)) if m else None
-    except (ValueError, TypeError, AttributeError):
-        return None
-
-
 def fetch_one_overview(code: str) -> tuple[float | None, ...] | None:
     """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
     try:
@@ -56,11 +29,11 @@ def fetch_one_overview(code: str) -> tuple[float | None, ...] | None:
         if df.empty:
             return None
         row = df.iloc[0]
-        mgmt = parse_fee_pct(row.get("管理费率"))
-        cust = parse_fee_pct(row.get("托管费率"))
-        sales_service = parse_fee_pct(row.get("销售服务费率"))
-        scale = _parse_scale(row.get("净资产规模"))
-        scale_shares = _parse_scale(row.get("份额规模"))
+        mgmt = parse_pct(row.get("管理费率"))
+        cust = parse_pct(row.get("托管费率"))
+        sales_service = parse_pct(row.get("销售服务费率"))
+        scale = parse_scale(row.get("净资产规模"))
+        scale_shares = parse_scale(row.get("份额规模"))
         establish_full = str(row.get("成立日期/规模")) if pd.notna(row.get("成立日期/规模")) else None
         establish_date = establish_full.split(" / ")[0] if establish_full else None
         return (
@@ -95,19 +68,6 @@ def batch_fetch_overview(codes: list[str], on_result: Callable[[str, tuple | Non
             yield done, total
 
 
-def _parse_purchase(s: Any) -> float | None:
-    """解析 fund_purchase_em 的 手续费，用于批量获取申购费"""
-    if pd.isna(s) or s is None:
-        return None
-    s = str(s).strip().replace("%", "").replace("---", "").strip()
-    if not s:
-        return None
-    try:
-        return float(s)
-    except (ValueError, TypeError):
-        return None
-
-
 def fetch_purchase_data(codes: list[str] | None = None) -> dict[str, tuple[float | None, str | None]]:
     """获取申购费+起购金额。返回 {code: (purchase, min_purchase)}。
     codes=None 表示全部；空列表返回 {}。
@@ -122,7 +82,7 @@ def fetch_purchase_data(codes: list[str] | None = None) -> dict[str, tuple[float
     for _, row in df.iterrows():
         code = row["基金代码"]
         result[code] = (
-            _parse_purchase(row.get("手续费")),
+            parse_pct(row.get("手续费")),
             str(row.get("购买起点", "")) if pd.notna(row.get("购买起点")) else None,
         )
     return result

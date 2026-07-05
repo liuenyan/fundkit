@@ -24,6 +24,8 @@ import time
 import akshare as ak
 import pandas as pd
 
+from backend.parse_utils import parse_pct_series, to_float_series
+
 
 import db
 from backend.fund_data import batch_fetch_overview, fetch_purchase_data, save_overview_result
@@ -156,30 +158,15 @@ def collect_tracking_method() -> None:
     print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
 
 
-def _parse_daily_pct_series(s: pd.Series) -> pd.Series:
-    """向量化：归一化日增长率"""
-    s = s.astype(str).str.strip()
-    s = s.replace(["", "nan", "<NA>", "None", "—", "---"], None)
-    s = s.str.replace("%", "", regex=False).str.replace(" ", "", regex=False)
-    return pd.to_numeric(s, errors="coerce")
-
-
-def _to_float_series(s: pd.Series) -> pd.Series:
-    """向量化：转浮点"""
-    s = s.astype(str).str.strip()
-    s = s.replace(["", "nan", "<NA>", "None"], None)
-    return pd.to_numeric(s, errors="coerce")
-
-
 def _build_nav_part(*, df: pd.DataFrame, date_val: str, nav_col: str, cum_col: str,
                     growth_col: str, source: str, ts: float) -> pd.DataFrame:
     """向量化构建净值记录 DataFrame"""
     return pd.DataFrame({
         "基金代码": df["基金代码"].astype(str),
         "日期": date_val,
-        "单位净值": _to_float_series(df[nav_col]),
-        "累计净值": _to_float_series(df[cum_col]),
-        "日增长率": _parse_daily_pct_series(df[growth_col]),
+        "单位净值": to_float_series(df[nav_col]),
+        "累计净值": to_float_series(df[cum_col]),
+        "日增长率": parse_pct_series(df[growth_col]),
         "数据来源": source,
         "updated_at": ts,
     })
