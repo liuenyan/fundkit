@@ -109,13 +109,6 @@ def _fetch_csindex(code: str) -> pd.DataFrame | None:
 
 def _fetch_sina_cn(code: str, market_prefix: str | None = None) -> pd.DataFrame | None:
     """使用 Sina stock_zh_index_daily 获取 A 股指数收盘价。"""
-    if market_prefix is None:
-        with db.engine.connect() as conn:
-            row = conn.execute(
-                db.text("SELECT market_prefix FROM index_name_map WHERE index_code=:c"),
-                {"c": code},
-            ).fetchone()
-            market_prefix = row[0] if row else None
     symbol = f"{market_prefix}{code}" if market_prefix else code
     try:
         df = ak.stock_zh_index_daily(symbol=symbol)
