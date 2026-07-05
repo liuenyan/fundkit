@@ -213,7 +213,7 @@ build_index_name_map.py:
 
 当前覆盖：**485 条 equity**（常用宽基+行业+主题+沪港深指数），**36 条**无法匹配的偏门指数自动回退 acc_nav（Level 3）。
 
-> 完整映射报告见 `docs/index_name_map_report.md`，可通过 `PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py` 重新生成。
+> 完整映射报告见 `docs/index_name_map_report.md`，可通过 `PYTHONPATH=. uv run python tools/gen_name_map_report.py` 重新生成。
 
 ---
 

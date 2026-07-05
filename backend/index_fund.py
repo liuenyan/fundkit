@@ -79,7 +79,7 @@ def fetch_all_index_funds() -> pd.DataFrame:
     result = db.load_index_fund_nav()
     if result is not None and not result.empty:
         return result
-    st.error("净值数据尚未采集，请运行：`./venv/bin/python collect_fund_data.py --nav`")
+    st.error("净值数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
     return pd.DataFrame()
 
 

@@ -5,19 +5,19 @@ Single-file Python CLI for DCA (定投) backtesting of Chinese open-end funds.
 ## Run
 
 ```bash
-./venv/bin/python -m backend.dca_backtest --fund 161725 --amount 1000 --start 2018-01-01
+uv run python -m backend.dca_backtest --fund 161725 --amount 1000 --start 2018-01-01
 # or Streamlit UI
-./venv/bin/python -m streamlit run app.py
+uv run streamlit run app.py
 ```
 
-System Python won't work (missing deps). Always use `venv/bin/python`.
+Always use `uv run` (automatically uses project venv).
 
 ## Key facts
 
 - **Data source**: [AKShare](https://github.com/akfamily/akshare) → 天天基金网, **requires internet**
-- **Tests**: pytest, run via `./venv/bin/python -m pytest tests/`
+- **Tests**: pytest, run via `uv run python -m pytest tests/`
 - **Rename rule**: 同名文件重命名必须用 `git mv`，否则 git 不识别
-- **Code style**: ruff (line-length=120, target-version=py311), managed via `requirements-dev.txt`
+- **Code style**: ruff (line-length=120, target-version=py311), managed via `pyproject.toml`
 - **Chart output**: `./charts/<fund_code>_dca_backtest.png` (Auto, `matplotlib.use("Agg")`)
 - **CJK fonts**: `tools/cjk_font.py` — `setup_cjk_font()` via `mpl.font_manager.findfont`
 - **Backtest core**: `simulate_dca()` at line ~220, returns `(detail_df, events_list, redeem_fee, final_val)`
@@ -108,10 +108,10 @@ main()
   - 运行时 API 失败回退 `acc_nav`
   - 聚宽（index_stock_info）已移除：0% 唯一贡献
   - 验证支持 `_verify_sina_hk()` / `_verify_sina_us()` 对 Sina 源的正确性检查
-- `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
+- `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. uv run python tools/gen_name_map_report.py`）
 - `tools/csi_export.py`: 中证指数官网导出接口 (`POST csindex-home/exportExcel/indexAll/CH`)，返回 2,967 条指数（1,847 条股票类）。`get_equity_name_map()` 基于 指数简称 + 指数全称去"指数"后缀构建 5,471 条名称映射。本地 CSV 缓存 `data/csi_index_list.csv`，支持 `--force` 刷新
 - `tools/cnindex_export.py`: 国证指数官网 xlsx 导出 (`cnindex.com.cn`)，返回 1,384 条指数（1,212 条股票类），补深证/国证系列。本地 CSV 缓存 `data/cnindex_index_list.csv`
-- `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. ./venv/bin/python tools/gen_name_map_report.py`）
+- `tools/gen_name_map_report.py`: 从 DB 重新生成 `docs/index_name_map_report.md`（`PYTHONPATH=. uv run python tools/gen_name_map_report.py`）
 - `docs/overseas_index_mapping.md`: 海外指数映射方案文档，定义三层映射策略：P0(Sina价格源) / P1(代码映射+acc_nav回退) / P2(不处理)。已落地 5 条 P0（恒生×3 + 美股×2），mapping 从 486→491
 - **`index_series` + `cache_meta` 列改名**：`name` → `index_code`，统一用裸代码（`000300` / `HSI` / `.NDX`）作主键，解决中文名碰撞问题。已有 ~74K 行迁移完成
 - **`backend/index_fetcher.py`**：统一取价入口，`lookup_index()` 解析跟踪标→index_code+source，`fetch_index_price()` 按 source 路由到 csindex/sina_hk/sina_us API，缓存复用 `index_series.metric="price"`
@@ -128,18 +128,18 @@ main()
 
 ```bash
 # 手动指定场景
-./venv/bin/python -m tools.compare_strategies \
+uv run python -m tools.compare_strategies \
   --funds 110026,110020,160119 \
   --scenarios "熊市底部:2019-01-10,市场平均:2020-04-10,牛市顶部:2021-07-09" \
   --output docs/strategy_comparison.md
 
 # 自动识别场景（基于净值历史找最高/最低/中位数）
-./venv/bin/python -m tools.find_scenarios --fund 110026 \
+uv run python -m tools.find_scenarios --fund 110026 \
   --scenarios "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"
 # 输出: 牛市顶部:2021-08-04,熊市底部:2018-10-18,市场平均:2020-09-28
 
 # 组合使用：自动场景 + 对比
-./venv/bin/python -m tools.compare_strategies \
+uv run python -m tools.compare_strategies \
   --funds 110026 \
   --auto-scenarios 110026 \
   --scenarios-spec "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"

@@ -1,9 +1,0 @@
-line-length = 120
-target-version = "py311"
-
-[format]
-quote-style = "double"
-
-[lint]
-select = ["E", "F", "W", "ANN"]
-ignore = ["E501", "ANN002", "ANN003", "ANN204", "ANN401"]

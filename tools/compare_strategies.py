@@ -2,12 +2,12 @@
 多基金 × 多起点 × 多策略 定投对比工具
 
 手动指定场景:
-  ./venv/bin/python -m tools.compare_strategies \\
+  uv run python -m tools.compare_strategies \\
     --funds 110026,110020,160119 \\
     --scenarios "熊市底部:2019-01-10,市场平均:2020-04-10,牛市顶部:2021-07-09"
 
 自动寻找场景（需缓存或网络）:
-  ./venv/bin/python -m tools.compare_strategies \\
+  uv run python -m tools.compare_strategies \\
     --funds 110026 \\
     --auto-scenarios 110026 \\
     --scenarios-spec "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"

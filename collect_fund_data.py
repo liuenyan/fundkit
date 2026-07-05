@@ -9,11 +9,11 @@ TTL: 费率 90 天 / 净值 24 小时
   4. fund_etf_fund_daily_em() — 场内 ETF 净值（1 次 API 调用）
 
 用法:
-  ./venv/bin/python collect_fund_data.py              # 采集费率+规模（默认）
-  ./venv/bin/python collect_fund_data.py --nav         # 采集净值
-  ./venv/bin/python collect_fund_data.py --force       # 强制全量重采费率
-  ./venv/bin/python collect_fund_data.py --nav --force # 强制重采净值
-  ./venv/bin/python collect_fund_data.py --codes 000001,000002  # 指定基金
+  uv run python collect_fund_data.py              # 采集费率+规模（默认）
+  uv run python collect_fund_data.py --nav         # 采集净值
+  uv run python collect_fund_data.py --force       # 强制全量重采费率
+  uv run python collect_fund_data.py --nav --force # 强制重采净值
+  uv run python collect_fund_data.py --codes 000001,000002  # 指定基金
 """
 
 import argparse

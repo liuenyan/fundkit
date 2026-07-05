@@ -3,7 +3,7 @@
 
 输出格式与 compare_strategies.py 的 --scenarios 参数兼容，可直接管道使用:
 
-  ./venv/bin/python -m tools.find_scenarios --fund 110026 --scenarios "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"
+  uv run python -m tools.find_scenarios --fund 110026 --scenarios "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"
 
 场景类型说明:
   牛市顶部:YYYY        — 指定年份内净值最高日

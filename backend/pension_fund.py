@@ -50,7 +50,7 @@ def fetch_pension_funds() -> pd.DataFrame:
     db.init_db()
     result = db.load_pension_funds()
     if result is None or result.empty:
-        st.error("数据尚未采集，请运行：`./venv/bin/python collect_fund_data.py --nav`")
+        st.error("数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
         return pd.DataFrame()
     result["养老金分类"] = result.apply(classify_pension_category, axis=1)
     return result

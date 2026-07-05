@@ -25,7 +25,7 @@ CUSTOM_LABEL = "✏️ 自定义…"
 
 all_funds = load_all_funds()
 if all_funds.empty:
-    st.error("基金数据尚未采集，请运行：`./venv/bin/python collect_fund_data.py`")
+    st.error("基金数据尚未采集，请运行：`uv run python collect_fund_data.py`")
     st.stop()
 
 # ── 筛选栏 ──

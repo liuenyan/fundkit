@@ -5,7 +5,7 @@
 ## 用法
 
 ```bash
-./venv/bin/python collect_fund_data.py [选项]
+uv run python collect_fund_data.py [选项]
 ```
 
 ## 参数
@@ -24,24 +24,24 @@
 
 ```bash
 # 费率+规模+档案+跟踪方式（默认）
-./venv/bin/python collect_fund_data.py
+uv run python collect_fund_data.py
 
 # 强制重采
-./venv/bin/python collect_fund_data.py --force
+uv run python collect_fund_data.py --force
 
 # 仅采集净值
-./venv/bin/python collect_fund_data.py --nav
-./venv/bin/python collect_fund_data.py --nav --force
+uv run python collect_fund_data.py --nav
+uv run python collect_fund_data.py --nav --force
 
 # 仅采集基金名录
-./venv/bin/python collect_fund_data.py --catalog
-./venv/bin/python collect_fund_data.py --catalog --force
+uv run python collect_fund_data.py --catalog
+uv run python collect_fund_data.py --catalog --force
 
 # 仅采集跟踪方式
-./venv/bin/python collect_fund_data.py --tracking-method
+uv run python collect_fund_data.py --tracking-method
 
 # 指定基金
-./venv/bin/python collect_fund_data.py --codes 000001,161725
+uv run python collect_fund_data.py --codes 000001,161725
 ```
 
 ## 数据源与 TTL
@@ -70,14 +70,14 @@
 
 ```bash
 # 初次使用（按顺序）
-./venv/bin/python collect_fund_data.py --catalog   # 1. 基金名录
-./venv/bin/python collect_fund_data.py              # 2. 费率+规模+档案+跟踪方式
-./venv/bin/python collect_fund_data.py --nav         # 3. 净值
+uv run python collect_fund_data.py --catalog   # 1. 基金名录
+uv run python collect_fund_data.py              # 2. 费率+规模+档案+跟踪方式
+uv run python collect_fund_data.py --nav         # 3. 净值
 
 # 后续增量刷新
-./venv/bin/python collect_fund_data.py --nav         # 仅刷新净值（24h TTL）
+uv run python collect_fund_data.py --nav         # 仅刷新净值（24h TTL）
 
 # 全量重置
-./venv/bin/python collect_fund_data.py --force
-./venv/bin/python collect_fund_data.py --nav --force
+uv run python collect_fund_data.py --force
+uv run python collect_fund_data.py --nav --force
 ```

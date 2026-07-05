@@ -2,8 +2,8 @@
 构建 index_name_map 表：跟踪标的名称 → 指数代码映射。
 
 用法:
-  ./venv/bin/python -m tools.build_index_name_map           # 采集并写入
-  ./venv/bin/python -m tools.build_index_name_map --dry-run  # 预览不写入
+  uv run python -m tools.build_index_name_map           # 采集并写入
+  uv run python -m tools.build_index_name_map --dry-run  # 预览不写入
 """
 
 import argparse

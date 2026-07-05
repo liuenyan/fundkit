@@ -96,9 +96,8 @@ fundkit/
 │   ├── data_source.md       # 数据源调研与选型说明
 │   └── database.md          # 数据库表设计文档
 │
-├── ruff.toml                # ruff 代码规范配置
-├── requirements.txt         # 运行时依赖
-└── requirements-dev.txt     # 开发依赖（ruff）
+├── pyproject.toml           # 项目配置与依赖声明
+└── uv.lock                  # 依赖锁定文件
 ```
 
 ### 数据流
@@ -136,19 +135,19 @@ Streamlit 页面 ──本地 JOIN 查询──→   │
 ## 快速开始
 
 ```bash
-# 安装依赖（虚拟环境）
-./venv/bin/pip install -r requirements.txt
+# 安装依赖（自动创建 .venv）
+uv sync --extra dev
 
 # 预采集数据（首次使用）
-python collect_fund_data.py --catalog     # 基金名录
-python collect_fund_data.py               # 费率+规模+档案+跟踪方式
-python collect_fund_data.py --nav         # 净值
+uv run python collect_fund_data.py --catalog     # 基金名录
+uv run python collect_fund_data.py               # 费率+规模+档案+跟踪方式
+uv run python collect_fund_data.py --nav         # 净值
 
 # 启动图形界面
-streamlit run app.py
+uv run streamlit run app.py
 
 # 或使用命令行定投回测（详见 docs/dca_backtest_cli.md）
-python -m backend.dca_backtest --fund 163415 --amount 1000 --start 2018-01-01
+uv run python -m backend.dca_backtest --fund 163415 --amount 1000 --start 2018-01-01
 ```
 
 ## 注意事项
