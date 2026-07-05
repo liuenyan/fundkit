@@ -29,14 +29,50 @@ _TODAY = datetime.now().strftime("%Y%m%d")
 
 # ── 非权益关键词（按优先级从高到低）──
 NON_EQUITY_KEYWORDS = [
-    ("bond", ["中债", "国债", "国开行", "农发行", "进出口行", "政金债",
-              "政策性金融债", "金融债", "信用债", "可转债", "可交换债",
-              "短融", "中票", "城投债", "地方政府债", "公司债",
-              "全价", "财富", "债券", "同业存单"]),
+    (
+        "bond",
+        [
+            "中债",
+            "国债",
+            "国开行",
+            "农发行",
+            "进出口行",
+            "政金债",
+            "政策性金融债",
+            "金融债",
+            "信用债",
+            "可转债",
+            "可交换债",
+            "短融",
+            "中票",
+            "城投债",
+            "地方政府债",
+            "公司债",
+            "全价",
+            "财富",
+            "债券",
+            "同业存单",
+        ],
+    ),
     ("commodity", ["上期有色金属", "上海金", "黄金", "原油", "商品"]),
-    ("overseas", ["纳斯达克", "标普", "S&P", "道琼斯", "Dow Jones",
-                  "MSCI", "恒生", "iBoxx", "iEdge", "CFETS",
-                  "Emerging Asia", "US REIT", "US 50"]),
+    (
+        "overseas",
+        [
+            "纳斯达克",
+            "标普",
+            "S&P",
+            "道琼斯",
+            "Dow Jones",
+            "MSCI",
+            "恒生",
+            "iBoxx",
+            "iEdge",
+            "CFETS",
+            "Emerging Asia",
+            "US REIT",
+            "US 50",
+        ],
+    ),
 ]
 
 
@@ -52,8 +88,15 @@ def classify_tracking_target(name: str) -> str:
 # ── 名称归一化 ──
 
 _SUFFIXES = [
-    "指数", "(价格)", "(四级行业)", "(全价)", "(总值)", "(总收益)",
-    "(LOF)", "(行业)", " ",
+    "指数",
+    "(价格)",
+    "(四级行业)",
+    "(全价)",
+    "(总值)",
+    "(总收益)",
+    "(LOF)",
+    "(行业)",
+    " ",
 ]
 _CURRENCY_SUFFIXES = ["人民币", "港元", "美元", "港币"]
 
@@ -67,10 +110,10 @@ def normalize(name: str) -> str:
             break
     # 去掉末尾残留括号内容
     if "(" in name and name.endswith(")"):
-        name = name[:name.index("(")]
+        name = name[: name.index("(")]
     # 全角括号也处理（含全角开头+半角结尾的混合情况）
     if "（" in name and (name.endswith("）") or name.endswith(")")):
-        name = name[:name.index("（")]
+        name = name[: name.index("（")]
     return name.strip()
 
 
@@ -78,52 +121,40 @@ def normalize(name: str) -> str:
 
 KNOWN_MAP: dict[str, tuple[str, str | None, str, str, str]] = {
     # (normalized_name) → (code, market_prefix, source, index_type, short_name)
-
     # CNINDEX 只有"国证新能源车"（无"汽"），聚宽能匹配但已移除
-    "国证新能源汽车":    ("399417", "sz", "daily_em", "equity", "新能源车"),
-
+    "国证新能源汽车": ("399417", "sz", "daily_em", "equity", "新能源车"),
     # CSI 只有"责任指数"（保留"指数"），normalize 后"责任"不匹配
-    "责任":              ("000048", "sh", "csindex", "equity", "责任指数"),
-
+    "责任": ("000048", "sh", "csindex", "equity", "责任指数"),
     # CSI 只有"中证800有色金属"（无"有色"缩写）
-    "中证800有色":       ("H30031", "sh", "csindex", "equity", "800有色"),
-
+    "中证800有色": ("H30031", "sh", "csindex", "equity", "800有色"),
     # CSI 只有"中证细分化工产业主题"（无"全收益"版本），回退价格指数
     "中证细分化工产业主题全收益": ("000813", "sh", "csindex", "equity", "细分化工"),
-
     # CSI 只有"上证科创板新能源"（无"主题"）
     "上证科创板新能源主题": ("000692", "sh", "csindex", "equity", "科创新能"),
-
     # CNINDEX 只有"创业板中盘200指数"（fund 缺"中盘"）
-    "创业板200":         ("399019", "sz", "daily_em", "equity", "创业200"),
-
+    "创业板200": ("399019", "sz", "daily_em", "equity", "创业200"),
     # tracking_target "深证300价格" → normalize 后为"深证300价格"，不会自动匹配"深证300"
-    "深证300价格":       ("399007", "sz", "daily_em", "equity", "深证300"),
-
+    "深证300价格": ("399007", "sz", "daily_em", "equity", "深证300"),
     # tracking_target "香蜜湖金融科技指数(价格)" → normalize 后为"香蜜湖金融科技"
-    "香蜜湖金融科技":     ("399699", "sz", "daily_em", "equity", "金融科技"),
-
+    "香蜜湖金融科技": ("399699", "sz", "daily_em", "equity", "金融科技"),
     # 非权益
-    "上海金":            ("SHAU", "sh", "daily_em", "commodity", "上海金"),
-
+    "上海金": ("SHAU", "sh", "daily_em", "commodity", "上海金"),
     # ── 海外指数 P0（Sina 财经可获取价格）──
     # 恒生系列 via stock_hk_index_daily_sina (normalize strips "指数" → keys are stemmed)
     # market_prefix=None：Sina API 的 symbol 在 index_code 中已完整，无需拼接
-    "恒生":              ("HSI", None, "sina_hk", "equity", "恒生指数"),
-    "恒生中国企业":      ("HSCEI", None, "sina_hk", "equity", "恒生国企"),
-    "恒生科技":         ("HSTECH", None, "sina_hk", "equity", "恒生科技"),
+    "恒生": ("HSI", None, "sina_hk", "equity", "恒生指数"),
+    "恒生中国企业": ("HSCEI", None, "sina_hk", "equity", "恒生国企"),
+    "恒生科技": ("HSTECH", None, "sina_hk", "equity", "恒生科技"),
     # 美股系列 via index_us_stock_sina
-    "纳斯达克100":      (".NDX", None, "sina_us", "equity", "纳指100"),
-    "道琼斯工业平均":   (".DJI", None, "sina_us", "equity", "道琼斯"),
+    "纳斯达克100": (".NDX", None, "sina_us", "equity", "纳指100"),
+    "道琼斯工业平均": (".DJI", None, "sina_us", "equity", "道琼斯"),
 }
 
 
 def _verify_csindex(code: str) -> bool:
     """验证 stock_zh_index_hist_csindex 能否返回数据"""
     try:
-        df = ak.stock_zh_index_hist_csindex(
-            symbol=code, start_date="20200101", end_date=_TODAY
-        )
+        df = ak.stock_zh_index_hist_csindex(symbol=code, start_date="20200101", end_date=_TODAY)
         return df is not None and not df.empty
     except Exception:
         return False
@@ -171,9 +202,7 @@ def _verify_sina_cn(prefix: str, code: str) -> bool:
 
 def _fetch_close_from_csindex(code: str) -> pd.DataFrame | None:
     try:
-        df = ak.stock_zh_index_hist_csindex(
-            symbol=code, start_date="20000101", end_date=_TODAY
-        )
+        df = ak.stock_zh_index_hist_csindex(symbol=code, start_date="20000101", end_date=_TODAY)
         if df is None or df.empty or "收盘" not in df.columns:
             return None
         out = df[["日期", "收盘"]].dropna().copy()
@@ -260,22 +289,26 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
             code, prefix, source, mapped_type, short_name = KNOWN_MAP[n]
             # 记录 跳过非 equity（不验证 — 只需确认不要误写入 price 缓存）
             if mapped_type != "equity":
-                skipped.append({
-                    "tracking_target": target,
-                    "display_name": n,
-                    "index_code": code,
-                    "index_type": mapped_type,
-                    "reason": f"non-equity({mapped_type})",
-                })
+                skipped.append(
+                    {
+                        "tracking_target": target,
+                        "display_name": n,
+                        "index_code": code,
+                        "index_type": mapped_type,
+                        "reason": f"non-equity({mapped_type})",
+                    }
+                )
                 continue
         elif index_type != "equity":
-            skipped.append({
-                "tracking_target": target,
-                "display_name": n,
-                "index_code": None,
-                "index_type": index_type,
-                "reason": f"non-equity({index_type})",
-            })
+            skipped.append(
+                {
+                    "tracking_target": target,
+                    "display_name": n,
+                    "index_code": None,
+                    "index_type": index_type,
+                    "reason": f"non-equity({index_type})",
+                }
+            )
             continue
         else:
             # 自动匹配：CSI 官网 → 国证官网
@@ -300,13 +333,15 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                 match_source = "cnindex"
 
             if code is None:
-                failed.append({
-                    "tracking_target": target,
-                    "display_name": n,
-                    "index_code": None,
-                    "index_type": "equity",
-                    "reason": "no match from any source",
-                })
+                failed.append(
+                    {
+                        "tracking_target": target,
+                        "display_name": n,
+                        "index_code": None,
+                        "index_type": "equity",
+                        "reason": "no match from any source",
+                    }
+                )
                 continue
 
             # 确定数据源：国证匹配的走东财，CSI 匹配的走中证
@@ -325,13 +360,15 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                     # CN 代码无市场前缀，东财直接用裸代码
                     pass
                 else:
-                    failed.append({
-                        "tracking_target": target,
-                        "display_name": n,
-                        "index_code": code,
-                        "index_type": "equity",
-                        "reason": f"unknown code format: {code}",
-                    })
+                    failed.append(
+                        {
+                            "tracking_target": target,
+                            "display_name": n,
+                            "index_code": code,
+                            "index_type": "equity",
+                            "reason": f"unknown code format: {code}",
+                        }
+                    )
                     continue
 
         # 验证（仅记录结果，不阻止写入——运行时 API 失败会回退 acc_nav）
@@ -353,16 +390,18 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
             elif source == "sina_us":
                 verified_ok = _verify_sina_us(code)
 
-        success.append({
-            "tracking_target": target,
-            "display_name": n,
-            "short_name": short_name,
-            "index_code": code,
-            "market_prefix": prefix,
-            "source": source,
-            "index_type": "equity",
-            "verified": verified_ok,
-        })
+        success.append(
+            {
+                "tracking_target": target,
+                "display_name": n,
+                "short_name": short_name,
+                "index_code": code,
+                "market_prefix": prefix,
+                "source": source,
+                "index_type": "equity",
+                "verified": verified_ok,
+            }
+        )
 
     return success, failed, skipped
 
@@ -396,8 +435,9 @@ def print_report(success: list[dict], failed: list[dict], skipped: list[dict]) -
     logger.info("=" * 60)
     logger.info("总跟踪标数: %d", total)
     verified_count = sum(1 for r in success if r.get("verified"))
-    logger.info("  ✅ 成功映射: %d（已验证 %d，待验证 %d）",
-                len(success), verified_count, len(success) - verified_count)
+    logger.info(
+        "  ✅ 成功映射: %d（已验证 %d，待验证 %d）", len(success), verified_count, len(success) - verified_count
+    )
     logger.info("  ❌ 未匹配: %d", len(failed))
     logger.info("  ⏭️  跳过(非权益): %d", len(skipped))
 
@@ -417,8 +457,7 @@ def print_report(success: list[dict], failed: list[dict], skipped: list[dict]) -
         logger.info("")
         logger.info("❌ 验证失败的 equity 映射:")
         for r in failed:
-            logger.info("  [%s]  → code=%s (%s)", r["tracking_target"][:40],
-                        r["index_code"] or "N/A", r["reason"])
+            logger.info("  [%s]  → code=%s (%s)", r["tracking_target"][:40], r["index_code"] or "N/A", r["reason"])
 
     # 列出来源分布
     source_counts: dict[str, int] = {}

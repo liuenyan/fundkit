@@ -1,4 +1,5 @@
 """从 index_name_map 表重新生成 docs/index_name_map_report.md"""
+
 from pathlib import Path
 
 import pandas as pd
@@ -28,14 +29,9 @@ def rep_fund(target: str) -> str:
 def generate() -> None:
     db.init_db()
 
-    im = pd.read_sql_query(
-        "SELECT * FROM index_name_map WHERE index_type = 'equity'", db_engine
-    )
+    im = pd.read_sql_query("SELECT * FROM index_name_map WHERE index_type = 'equity'", db_engine)
     eq_names = set(im["display_name"])
-    name_map = {
-        r["display_name"]: (r["index_code"], r["market_prefix"], r["source"])
-        for _, r in im.iterrows()
-    }
+    name_map = {r["display_name"]: (r["index_code"], r["market_prefix"], r["source"]) for _, r in im.iterrows()}
 
     sql = """
     SELECT DISTINCT pf.跟踪标的 AS target

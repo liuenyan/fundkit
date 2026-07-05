@@ -70,12 +70,12 @@ funds_meta = Table(
 index_name_map = Table(
     "index_name_map",
     metadata,
-    Column("display_name", String, nullable=False),   # 归一化名称
-    Column("short_name", String),                       # 指数简称（原始）
-    Column("index_code", String, nullable=False),       # 数字代码
-    Column("market_prefix", String),                     # "sh"/"sz"/"csi" 用于 daily_em 后备
-    Column("source", String),                            # "csindex"/"daily_em"/"manual"
-    Column("index_type", String, nullable=False),        # "equity"/"bond"/"commodity"/"overseas"
+    Column("display_name", String, nullable=False),  # 归一化名称
+    Column("short_name", String),  # 指数简称（原始）
+    Column("index_code", String, nullable=False),  # 数字代码
+    Column("market_prefix", String),  # "sh"/"sz"/"csi" 用于 daily_em 后备
+    Column("source", String),  # "csindex"/"daily_em"/"manual"
+    Column("index_type", String, nullable=False),  # "equity"/"bond"/"commodity"/"overseas"
     PrimaryKeyConstraint("display_name"),
 )
 
@@ -224,21 +224,39 @@ class FundFeeTable(_DictTable):
         rows = self._load_rows(codes)
         return {
             code: {
-                "申购费": r[1], "管理费": r[2], "托管费": r[3],
-                "销售服务费": r[4], "起购金额": r[5], "综合费率": r[6],
+                "申购费": r[1],
+                "管理费": r[2],
+                "托管费": r[3],
+                "销售服务费": r[4],
+                "起购金额": r[5],
+                "综合费率": r[6],
             }
             for code, r in rows.items()
         }
 
-    def save(self, code: str, purchase: float | None, mgmt: float | None, cust: float | None,
-             sales_service: float | None, min_purchase: str | None, total: float | None) -> None:
+    def save(
+        self,
+        code: str,
+        purchase: float | None,
+        mgmt: float | None,
+        cust: float | None,
+        sales_service: float | None,
+        min_purchase: str | None,
+        total: float | None,
+    ) -> None:
         with engine.begin() as conn:
             conn.execute(
                 self.table.insert().prefix_with("OR REPLACE"),
-                {"基金代码": code, "申购费": purchase, "管理费": mgmt,
-                 "托管费": cust, "销售服务费": sales_service,
-                 "起购金额": min_purchase, "综合费率": total,
-                 "updated_at": time.time()},
+                {
+                    "基金代码": code,
+                    "申购费": purchase,
+                    "管理费": mgmt,
+                    "托管费": cust,
+                    "销售服务费": sales_service,
+                    "起购金额": min_purchase,
+                    "综合费率": total,
+                    "updated_at": time.time(),
+                },
             )
 
     def cached_count(self) -> int:
@@ -256,17 +274,13 @@ class FundScaleTable(_DictTable):
 
     def load(self, codes: list[str]) -> dict[str, dict[str, Any]]:
         rows = self._load_rows(codes)
-        return {
-            code: {"净资产规模": r[1], "份额规模": r[2]}
-            for code, r in rows.items()
-        }
+        return {code: {"净资产规模": r[1], "份额规模": r[2]} for code, r in rows.items()}
 
     def save(self, code: str, scale: float | None, shares: float | None = None) -> None:
         with engine.begin() as conn:
             conn.execute(
                 self.table.insert().prefix_with("OR REPLACE"),
-                {"基金代码": code, "净资产规模": scale,
-                 "份额规模": shares, "updated_at": time.time()},
+                {"基金代码": code, "净资产规模": scale, "份额规模": shares, "updated_at": time.time()},
             )
 
 
@@ -278,25 +292,45 @@ class FundProfileTable(_DictTable):
         rows = self._load_rows(codes)
         return {
             code: {
-                "发行日期": r[1], "成立日期": r[2], "基金管理人": r[3],
-                "基金托管人": r[4], "基金经理": r[5], "业绩比较基准": r[6],
-                "跟踪标的": r[7], "跟踪方式": r[8],
+                "发行日期": r[1],
+                "成立日期": r[2],
+                "基金管理人": r[3],
+                "基金托管人": r[4],
+                "基金经理": r[5],
+                "业绩比较基准": r[6],
+                "跟踪标的": r[7],
+                "跟踪方式": r[8],
             }
             for code, r in rows.items()
         }
 
-    def save(self, code: str, issue_date: str | None, establish_date: str | None,
-             mgr: str | None, custodian: str | None, fund_mgr: str | None,
-             benchmark: str | None, track_index: str | None,
-             track_method: str | None = None) -> None:
+    def save(
+        self,
+        code: str,
+        issue_date: str | None,
+        establish_date: str | None,
+        mgr: str | None,
+        custodian: str | None,
+        fund_mgr: str | None,
+        benchmark: str | None,
+        track_index: str | None,
+        track_method: str | None = None,
+    ) -> None:
         with engine.begin() as conn:
             conn.execute(
                 self.table.insert().prefix_with("OR REPLACE"),
-                {"基金代码": code, "发行日期": issue_date,
-                 "成立日期": establish_date, "基金管理人": mgr,
-                 "基金托管人": custodian, "基金经理": fund_mgr,
-                 "业绩比较基准": benchmark, "跟踪标的": track_index,
-                 "跟踪方式": track_method, "updated_at": time.time()},
+                {
+                    "基金代码": code,
+                    "发行日期": issue_date,
+                    "成立日期": establish_date,
+                    "基金管理人": mgr,
+                    "基金托管人": custodian,
+                    "基金经理": fund_mgr,
+                    "业绩比较基准": benchmark,
+                    "跟踪标的": track_index,
+                    "跟踪方式": track_method,
+                    "updated_at": time.time(),
+                },
             )
 
     def batch_update_tracking_method(self, method_map: dict[str, str]) -> None:

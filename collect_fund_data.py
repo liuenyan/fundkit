@@ -31,7 +31,6 @@ import db
 from backend.fund_data import batch_fetch_overview, fetch_purchase_data, save_overview_result
 
 
-
 def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[str] | None = None) -> None:
     db.init_db()
 
@@ -81,7 +80,8 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
         eta = (total - done) / rate if rate > 0 else 0
         print(
             f"\r  [{done}/{total}] 成功 {success}, 失败 {failed}, 速率 {rate:.1f} 只/秒, 预计剩余 {eta:.0f}s",
-            end="", flush=True,
+            end="",
+            flush=True,
         )
 
     print()
@@ -158,18 +158,21 @@ def collect_tracking_method() -> None:
     print(f"  → 名称启发式完成：增强 {enhanced_cnt}, 被动 {passive_cnt}")
 
 
-def _build_nav_part(*, df: pd.DataFrame, date_val: str, nav_col: str, cum_col: str,
-                    growth_col: str, source: str, ts: float) -> pd.DataFrame:
+def _build_nav_part(
+    *, df: pd.DataFrame, date_val: str, nav_col: str, cum_col: str, growth_col: str, source: str, ts: float
+) -> pd.DataFrame:
     """向量化构建净值记录 DataFrame"""
-    return pd.DataFrame({
-        "基金代码": df["基金代码"].astype(str),
-        "日期": date_val,
-        "单位净值": to_float_series(df[nav_col]),
-        "累计净值": to_float_series(df[cum_col]),
-        "日增长率": parse_pct_series(df[growth_col]),
-        "数据来源": source,
-        "updated_at": ts,
-    })
+    return pd.DataFrame(
+        {
+            "基金代码": df["基金代码"].astype(str),
+            "日期": date_val,
+            "单位净值": to_float_series(df[nav_col]),
+            "累计净值": to_float_series(df[cum_col]),
+            "日增长率": parse_pct_series(df[growth_col]),
+            "数据来源": source,
+            "updated_at": ts,
+        }
+    )
 
 
 def _extract_date_from_columns(cols: pd.Index) -> tuple[str | None, str | None, str | None]:
@@ -221,9 +224,13 @@ def collect_fund_nav(force: bool = False) -> None:
             print("  ! 缺少 日增长率 列，跳过")
         else:
             part = _build_nav_part(
-                df=open_df, date_val=date_str,
-                nav_col=nav_col, cum_col=cum_col, growth_col="日增长率",
-                source="open", ts=ts,
+                df=open_df,
+                date_val=date_str,
+                nav_col=nav_col,
+                cum_col=cum_col,
+                growth_col="日增长率",
+                source="open",
+                ts=ts,
             )
             nav_parts.append(part)
             print(f"  → 已解析 {len(part)} 只开放基金（{date_str}）")
@@ -244,9 +251,13 @@ def collect_fund_nav(force: bool = False) -> None:
             print("  ! 缺少 增长率 列，跳过")
         else:
             part = _build_nav_part(
-                df=etf_df, date_val=date_str2,
-                nav_col=nav_col2, cum_col=cum_col2, growth_col="增长率",
-                source="etf", ts=ts,
+                df=etf_df,
+                date_val=date_str2,
+                nav_col=nav_col2,
+                cum_col=cum_col2,
+                growth_col="增长率",
+                source="etf",
+                ts=ts,
             )
             nav_parts.append(part)
             print(f"  → 已解析 {len(part)} 只 ETF（{date_str2}）")
@@ -264,9 +275,13 @@ def collect_fund_nav(force: bool = False) -> None:
         new = fof_df[~fof_df["基金代码"].astype(str).isin(existing)]
         if not new.empty:
             part = _build_nav_part(
-                df=new, date_val=str(new.iloc[0]["日期"]),
-                nav_col="单位净值", cum_col="累计净值", growth_col="日增长率",
-                source="fof", ts=ts,
+                df=new,
+                date_val=str(new.iloc[0]["日期"]),
+                nav_col="单位净值",
+                cum_col="累计净值",
+                growth_col="日增长率",
+                source="fof",
+                ts=ts,
             )
             nav_parts.append(part)
             print(f"  → 新增 {len(part)} 只 FOF（{new.iloc[0]['日期']}）")

@@ -31,9 +31,9 @@ def _normalize(name: str) -> str:
     for s in _SUFFIXES:
         name = name.replace(s, "")
     if "(" in name and name.endswith(")"):
-        name = name[:name.index("(")]
+        name = name[: name.index("(")]
     if "（" in name and name.endswith("）"):
-        name = name[:name.index("（")]
+        name = name[: name.index("（")]
     return name.strip()
 
 

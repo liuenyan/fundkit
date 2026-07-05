@@ -5,9 +5,22 @@ Single-file Python CLI for DCA (定投) backtesting of Chinese open-end funds.
 ## Run
 
 ```bash
-uv run python -m backend.dca_backtest --fund 161725 --amount 1000 --start 2018-01-01
-# or Streamlit UI
+# 定投回测 (scripts 快捷方式)
+uv run backtest --fund 161725 --amount 1000 --start 2018-01-01
+# 等价的完整命令: uv run python -m backend.dca_backtest ...
+
+# Streamlit UI
 uv run streamlit run app.py
+
+# 数据采集
+uv run collect --nav
+
+# 快捷命令一览:
+#   uv run backtest           定投回测
+#   uv run collect            数据采集
+#   uv run find-scenarios     自动寻找关键市场位置
+#   uv run compare-strategies 策略对比
+#   uv run build-name-map     构建指数名称映射
 ```
 
 Always use `uv run` (automatically uses project venv).
@@ -128,18 +141,18 @@ main()
 
 ```bash
 # 手动指定场景
-uv run python -m tools.compare_strategies \
+uv run compare-strategies \
   --funds 110026,110020,160119 \
   --scenarios "熊市底部:2019-01-10,市场平均:2020-04-10,牛市顶部:2021-07-09" \
   --output docs/strategy_comparison.md
 
 # 自动识别场景（基于净值历史找最高/最低/中位数）
-uv run python -m tools.find_scenarios --fund 110026 \
+uv run find-scenarios --fund 110026 \
   --scenarios "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"
 # 输出: 牛市顶部:2021-08-04,熊市底部:2018-10-18,市场平均:2020-09-28
 
 # 组合使用：自动场景 + 对比
-uv run python -m tools.compare_strategies \
+uv run compare-strategies \
   --funds 110026 \
   --auto-scenarios 110026 \
   --scenarios-spec "牛市顶部:2021,熊市底部:2018-2019,市场平均:2020"

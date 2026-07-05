@@ -23,11 +23,11 @@ _TODAY = datetime.now().strftime("%Y%m%d")
 # ── 数据源后备链（Chain of Responsibility）──
 # 每个数据源取不到时，按此链路由到下一个备用源，链尾为 None。
 FALLBACK_MAP: dict[str, str | None] = {
-    "csindex":  "daily_em",
+    "csindex": "daily_em",
     "daily_em": "sina_cn",
-    "sina_cn":  None,
-    "sina_hk":  None,
-    "sina_us":  None,
+    "sina_cn": None,
+    "sina_hk": None,
+    "sina_us": None,
 }
 
 
@@ -48,9 +48,12 @@ def fetch_index_price(index_code: str, source: str, market_prefix: str | None = 
     """获取指数历史收盘价，返回 (date, value) DataFrame，经 index_series 缓存。
     若首选 source 取不到，按 FALLBACK_MAP 自动链式重试。"""
     return get_or_update_series(
-        index_code, "price", source,
+        index_code,
+        "price",
+        source,
         lambda: _fetch_chain(source, index_code, market_prefix),
     )[0]
+
 
 def fetch_index_price_by_target(tracking_target: str) -> pd.DataFrame | None:
     """快捷入口：跟踪标的名称 → 指数价格"""
@@ -96,9 +99,13 @@ def _fetch_one(source: str, code: str, market_prefix: str | None = None) -> pd.D
 
 def _fetch_with(
     api_func: Callable[..., pd.DataFrame],
-    *, date_col: str = "date", close_col: str = "close", **fixed_kwargs: object,
+    *,
+    date_col: str = "date",
+    close_col: str = "close",
+    **fixed_kwargs: object,
 ) -> Callable[[str], pd.DataFrame | None]:
     """返回一个 (symbol: str) -> pd.DataFrame | None 签名的取价函数。"""
+
     def fetcher(symbol: str) -> pd.DataFrame | None:
         try:
             df = api_func(symbol=symbol, **fixed_kwargs)
@@ -110,17 +117,21 @@ def _fetch_with(
         except Exception as exc:
             logger.warning("取价失败 %s: %s", symbol, exc)
         return None
+
     return fetcher
 
 
 _fetch_csindex = _fetch_with(
     ak.stock_zh_index_hist_csindex,
-    date_col="日期", close_col="收盘",
-    start_date="20000101", end_date=_TODAY,
+    date_col="日期",
+    close_col="收盘",
+    start_date="20000101",
+    end_date=_TODAY,
 )
 _fetch_daily_em = _fetch_with(
     ak.stock_zh_index_daily_em,
-    start_date="20000101", end_date=_TODAY,
+    start_date="20000101",
+    end_date=_TODAY,
 )
 _fetch_sina_cn = _fetch_with(ak.stock_zh_index_daily)
 _fetch_sina_hk = _fetch_with(ak.stock_hk_index_daily_sina)

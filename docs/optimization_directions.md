@@ -2,7 +2,7 @@
 
 ## A. 策略完善
 
-- **指数价格 MA（Level 2）**：通过 `stock_zh_index_daily_em` + `fund_profile.跟踪标的` 获取底层指数日线计算均线，比基金 acc_nav 更纯净（不受分红、份额拆分干扰）。新增 CLI `--index-ma` 参数，加载指数日线代替基金净值计算 MA
+- **[x] 指数价格 MA（Level 2）**：通过 `stock_zh_index_daily_em` + `fund_profile.跟踪标的` 获取底层指数日线计算均线，比基金 acc_nav 更纯净（不受分红、份额拆分干扰）。新增 CLI `--index-ma` 参数，加载指数日线代替基金净值计算 MA
 - **自定义 tier/multiplier 可配置化**：`MovingAverageBuyStrategy` 的 5 档偏差阈值 (`DEFAULT_TIERS`) 和买入倍数 (`DEFAULT_MULTIPLIERS`) 改为 CLI/UI 参数
 - **多信号组合策略**：MA 偏离度 + PE 百分位（宽基）/ 移动止盈 的信号叠加
 

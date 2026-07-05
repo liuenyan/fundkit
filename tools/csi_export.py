@@ -39,9 +39,16 @@ def fetch_csi_index_list(force: bool = False) -> pd.DataFrame:
         "sorter": {"sortField": "null", "sortOrder": None},
         "pager": {"pageNum": 1, "pageSize": 100000},
         "indexFilter": {
-            "ifCustomized": None, "ifTracked": None, "ifWeightCapped": None,
-            "indexCompliance": None, "hotSpot": None, "indexClassify": None,
-            "currency": None, "region": None, "indexSeries": None, "undefined": None,
+            "ifCustomized": None,
+            "ifTracked": None,
+            "ifWeightCapped": None,
+            "indexCompliance": None,
+            "hotSpot": None,
+            "indexClassify": None,
+            "currency": None,
+            "region": None,
+            "indexSeries": None,
+            "undefined": None,
         },
     }
     headers = {"Content-Type": "application/json;charset=UTF-8"}

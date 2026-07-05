@@ -89,23 +89,20 @@ class TestMovingAverageBuyStrategy:
     def test_fallback_when_no_ma_available(self) -> None:
         df = self._make_nav_df([1.0] * 10)
         s = MovingAverageBuyStrategy(1000, 250, 0.0015, df)
-        action = s.should_buy(df["date"].iloc[-1], df["unit_nav"].iloc[-1],
-                              DCAPosition(), {df["date"].iloc[-1]})
+        action = s.should_buy(df["date"].iloc[-1], df["unit_nav"].iloc[-1], DCAPosition(), {df["date"].iloc[-1]})
         assert action.amount == 1000  # fallback to base_amount
 
     def test_skip_when_not_in_invest_set(self) -> None:
         df = self._make_nav_df([1.0] * 300)
         s = MovingAverageBuyStrategy(1000, 250, 0.0015, df)
-        action = s.should_buy(df["date"].iloc[-1], df["unit_nav"].iloc[-1],
-                              DCAPosition(), set())
+        action = s.should_buy(df["date"].iloc[-1], df["unit_nav"].iloc[-1], DCAPosition(), set())
         assert action.amount == 0
 
     def test_skip_when_inactive(self) -> None:
         df = self._make_nav_df([1.0] * 300)
         s = MovingAverageBuyStrategy(1000, 250, 0.0015, df)
         pos = DCAPosition(is_active=False)
-        action = s.should_buy(df["date"].iloc[-1], df["unit_nav"].iloc[-1],
-                              pos, {df["date"].iloc[-1]})
+        action = s.should_buy(df["date"].iloc[-1], df["unit_nav"].iloc[-1], pos, {df["date"].iloc[-1]})
         assert action.amount == 0
 
 

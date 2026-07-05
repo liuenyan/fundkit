@@ -54,7 +54,9 @@ def fetch_one_overview(code: str) -> tuple[Any, ...] | None:
         return None
 
 
-def batch_fetch_overview(codes: list[str], on_result: Callable[[str, tuple | None], None], max_workers: int = 10) -> Generator[tuple[int, int], None, None]:
+def batch_fetch_overview(
+    codes: list[str], on_result: Callable[[str, tuple | None], None], max_workers: int = 10
+) -> Generator[tuple[int, int], None, None]:
     """并发调用 fetch_one_overview，对每个结果回调 on_result(code, 12字段元组或None)。
     Yields (done, total) 供调用方处理进度。
     """
@@ -93,22 +95,39 @@ def save_overview_result(code: str, result: tuple | None, purchase: float | None
     if result is None:
         return
     (
-        mgmt, cust, sales_service, scale, scale_shares,
-        issue_date, establish_date, mgr, custodian, fund_mgr,
-        benchmark, track_index,
+        mgmt,
+        cust,
+        sales_service,
+        scale,
+        scale_shares,
+        issue_date,
+        establish_date,
+        mgr,
+        custodian,
+        fund_mgr,
+        benchmark,
+        track_index,
     ) = result
     sales = sales_service if sales_service is not None else 0
     total_fee = (
-        round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2)
-        if mgmt is not None and cust is not None
-        else None
+        round((purchase or 0) + (mgmt or 0) + (cust or 0) + sales, 2) if mgmt is not None and cust is not None else None
     )
     db.fund_fee.save(code, purchase, mgmt, cust, sales_service, min_purchase, total_fee)
     db.fund_scale.save(code, scale, scale_shares)
     db.fund_profile.save(code, issue_date, establish_date, mgr, custodian, fund_mgr, benchmark, track_index)
 
 
-def fetch_mgmt_cust_fees(codes: list[str], progress_placeholder: Any = None) -> tuple[dict[str, float | None], dict[str, float | None], dict[str, float | None], dict[str, float | None], dict[str, float | None], dict[str, str | None], dict[str, float | None]]:
+def fetch_mgmt_cust_fees(
+    codes: list[str], progress_placeholder: Any = None
+) -> tuple[
+    dict[str, float | None],
+    dict[str, float | None],
+    dict[str, float | None],
+    dict[str, float | None],
+    dict[str, float | None],
+    dict[str, str | None],
+    dict[str, float | None],
+]:
     """批量获取管理费/托管费/销售服务费/规模/档案。
     优先级: DB 缓存(预采集) → 天天基金(fund_overview_em, 并发) → 雪球兜底
     返回 (mgmt_map, cust_map, sales_service_map, scale_map, purchase_map,
@@ -167,7 +186,11 @@ def fetch_mgmt_cust_fees(codes: list[str], progress_placeholder: Any = None) -> 
         if result is None:
             return
         (
-            mgmt, cust, sales_service, scale, scale_shares,
+            mgmt,
+            cust,
+            sales_service,
+            scale,
+            scale_shares,
             *_,
         ) = result
         mgmt_map[code] = mgmt
@@ -193,8 +216,9 @@ def fetch_mgmt_cust_fees(codes: list[str], progress_placeholder: Any = None) -> 
     )
 
 
-def enrich_fee_scale(result: pd.DataFrame, scale_source: pd.DataFrame | None = None,
-                     progress_placeholder: Any = None) -> pd.DataFrame:
+def enrich_fee_scale(
+    result: pd.DataFrame, scale_source: pd.DataFrame | None = None, progress_placeholder: Any = None
+) -> pd.DataFrame:
     """通用费率/规模补充。result 须含 基金代码 单位净值 手续费 列。
     scale_source: 外部规模 DataFrame 或 None（已含在 result 中则跳过）
     """
@@ -254,8 +278,7 @@ def enrich_fee_scale(result: pd.DataFrame, scale_source: pd.DataFrame | None = N
     return result
 
 
-def sort_result(result: pd.DataFrame, sort_by: str | None,
-                sort_options: dict[str, Any] | None = None) -> pd.DataFrame:
+def sort_result(result: pd.DataFrame, sort_by: str | None, sort_options: dict[str, Any] | None = None) -> pd.DataFrame:
     """通用排序"""
     opts = sort_options or SORT_OPTIONS
     config = opts.get(sort_by) if sort_by else None

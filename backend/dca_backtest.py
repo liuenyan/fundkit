@@ -104,11 +104,15 @@ def parse_args() -> argparse.Namespace:
         "--trailing-stop", type=float, default=0, help="【策略B】移动止盈回撤阈值 (如 0.08 表示从高点回撤 8%% 即卖出)"
     )
 
-    p.add_argument("--value-avg", type=float, default=0, help="【价值平均】每期市值增长目标 (如 1000 表示每月目标增长 1000 元市值)")
+    p.add_argument(
+        "--value-avg", type=float, default=0, help="【价值平均】每期市值增长目标 (如 1000 表示每月目标增长 1000 元市值)"
+    )
     p.add_argument("--va-max-multiple", type=float, default=4.0, help="【价值平均】每期最大投入倍数 (默认 4 倍)")
     p.add_argument("--va-min-amount", type=float, default=10.0, help="【价值平均】最低申购金额 (默认 10 元)")
 
-    p.add_argument("--ma-period", type=int, default=0, help="【均线策略】均线周期 (如 250，>0 启用均线策略，忽略 --value-avg)")
+    p.add_argument(
+        "--ma-period", type=int, default=0, help="【均线策略】均线周期 (如 250，>0 启用均线策略，忽略 --value-avg)"
+    )
     p.add_argument("--index-ma", action="store_true", help="【均线策略】使用跟踪指数收盘价替代基金净值计算均线")
     return p.parse_args()
 
@@ -179,7 +183,9 @@ def fetch_fund_name(fund_code: str) -> str:
     return fund_code
 
 
-def generate_dca_dates(nav_df: pd.DataFrame, freq: str, start_date: str, end_date: str, day: int = 10, weekday: int = 1) -> pd.DatetimeIndex:
+def generate_dca_dates(
+    nav_df: pd.DataFrame, freq: str, start_date: str, end_date: str, day: int = 10, weekday: int = 1
+) -> pd.DatetimeIndex:
     """生成定投日期序列并匹配到最近的交易日"""
     start = pd.Timestamp(start_date)
     end = pd.Timestamp(end_date)
@@ -235,7 +241,9 @@ def build_dividend_dict(dividend_df: pd.DataFrame | None) -> dict[pd.Timestamp, 
 
 
 def reinvest_dividends(
-    units: float, nav: float, date: pd.Timestamp,
+    units: float,
+    nav: float,
+    date: pd.Timestamp,
     dividend_dict: dict[pd.Timestamp, float],
 ) -> float:
     """计算分红再投资新增份额"""
@@ -260,8 +268,12 @@ def calc_redeem_fee(
 
 
 def _execute_sell(
-    pos: DCAPosition, date: pd.Timestamp, nav: float,
-    mkt_value: float, round_return: float, sell_reason: str,
+    pos: DCAPosition,
+    date: pd.Timestamp,
+    nav: float,
+    mkt_value: float,
+    round_return: float,
+    sell_reason: str,
     redeem_schedule: list[tuple[int, float]] | None,
     tp_cycle: bool,
     sell_strategy: SellStrategy,
@@ -271,9 +283,14 @@ def _execute_sell(
     fee = calc_redeem_fee(pos.fee_batches, date, nav, redeem_schedule)
     net = mkt_value - fee
     event = {
-        "date": date, "nav": nav, "return_rate": round_return,
-        "round_cost": pos.cost, "profit": mkt_value - pos.cost,
-        "redeem_fee": fee, "net_proceeds": net, "reason": sell_reason,
+        "date": date,
+        "nav": nav,
+        "return_rate": round_return,
+        "round_cost": pos.cost,
+        "profit": mkt_value - pos.cost,
+        "redeem_fee": fee,
+        "net_proceeds": net,
+        "reason": sell_reason,
     }
     pos.total_recovered += net
     pos.units = 0.0
@@ -287,21 +304,31 @@ def _execute_sell(
 
 
 def _build_record(
-    date: pd.Timestamp, nav: float,
-    inv_today: float, unit_added: float, div_units: float,
-    pos: DCAPosition, mkt_value: float,
+    date: pd.Timestamp,
+    nav: float,
+    inv_today: float,
+    unit_added: float,
+    div_units: float,
+    pos: DCAPosition,
+    mkt_value: float,
 ) -> dict[str, Any]:
     """构建单日快照记录"""
     total_value = mkt_value + pos.total_recovered
     overall_profit = total_value - pos.total_invested
     overall_return = overall_profit / pos.total_invested if pos.total_invested > 0 else 0.0
     return {
-        "date": date, "nav": nav, "investment": inv_today,
-        "units_added": unit_added, "dividend_units": div_units,
-        "total_units": pos.units, "total_cost": pos.cost,
-        "market_value": mkt_value, "profit": overall_profit,
+        "date": date,
+        "nav": nav,
+        "investment": inv_today,
+        "units_added": unit_added,
+        "dividend_units": div_units,
+        "total_units": pos.units,
+        "total_cost": pos.cost,
+        "market_value": mkt_value,
+        "profit": overall_profit,
         "return_rate": overall_return,
-        "total_invested": pos.total_invested, "total_value": total_value,
+        "total_invested": pos.total_invested,
+        "total_value": total_value,
     }
 
 
@@ -365,16 +392,24 @@ def simulate_dca(
                 sell_reason = signal.reason
 
         if should_sell and sell_strategy is not None:
-            event = _execute_sell(pos, date, nav, mkt_value, round_return,
-                                  sell_reason, redeem_schedule, tp_cycle,
-                                  sell_strategy, buy_strategy)
+            event = _execute_sell(
+                pos,
+                date,
+                nav,
+                mkt_value,
+                round_return,
+                sell_reason,
+                redeem_schedule,
+                tp_cycle,
+                sell_strategy,
+                buy_strategy,
+            )
             events.append(event)
             mkt_value = round_return = 0.0
 
         # ── 记录 ──
         if stop_profit_on or date in invest_set or div_units > 0:
-            records.append(_build_record(date, nav, inv_today, unit_added,
-                                          div_units, pos, mkt_value))
+            records.append(_build_record(date, nav, inv_today, unit_added, div_units, pos, mkt_value))
 
     detail = pd.DataFrame(records)
     if detail.empty:
@@ -391,7 +426,15 @@ def simulate_dca(
     return detail, events, final_redeem_fee, final_value
 
 
-def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date: str, purchase_rate: float, redeem_schedule: list[tuple[int, float]] | None = None, dividend_df: pd.DataFrame | None = None) -> LumpSumResult | None:
+def calc_lumpsum(
+    nav_df: pd.DataFrame,
+    amount: float,
+    start_date: str,
+    end_date: str,
+    purchase_rate: float,
+    redeem_schedule: list[tuple[int, float]] | None = None,
+    dividend_df: pd.DataFrame | None = None,
+) -> LumpSumResult | None:
     """一次性投入收益计算（基于真实分红数据再投资）"""
     df = nav_df.loc[nav_df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
     if df.empty:
@@ -422,7 +465,15 @@ def calc_lumpsum(nav_df: pd.DataFrame, amount: float, start_date: str, end_date:
     }
 
 
-def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str, start_date: str, end_date: str, chart_dir: str) -> None:
+def plot_results(
+    nav_df: pd.DataFrame,
+    detail: pd.DataFrame,
+    fund_code: str,
+    fund_name: str,
+    start_date: str,
+    end_date: str,
+    chart_dir: str,
+) -> None:
     """生成分析图表并保存到文件"""
     os.makedirs(chart_dir, exist_ok=True)
 
@@ -441,9 +492,19 @@ def plot_results(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fun
 
 
 def print_summary(
-    fund_name: str, fund_code: str, start: str, end: str, freq: str, amount: float, fee: float,
-    detail: pd.DataFrame, redeem_fee: float, final_val: float,
-    total_ret: float, ann_ret: float, mdd: float,
+    fund_name: str,
+    fund_code: str,
+    start: str,
+    end: str,
+    freq: str,
+    amount: float,
+    fee: float,
+    detail: pd.DataFrame,
+    redeem_fee: float,
+    final_val: float,
+    total_ret: float,
+    ann_ret: float,
+    mdd: float,
     lumpsum: LumpSumResult | None,
 ) -> None:
     total_invest = detail.iloc[-1]["total_invested"]
@@ -612,8 +673,7 @@ def main() -> None:
                     ma_nav = nav_df
             buy_strategy = MovingAverageBuyStrategy(args.amount, args.ma_period, args.fee, ma_nav)
         elif args.value_avg > 0:
-            buy_strategy = ValueAveragingBuyStrategy(
-                args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
+            buy_strategy = ValueAveragingBuyStrategy(args.value_avg, args.va_max_multiple, args.va_min_amount, args.fee)
         else:
             buy_strategy = FixedBuyStrategy(args.amount, args.fee)
         sell_strategy: SellStrategy | None = None
@@ -638,8 +698,22 @@ def main() -> None:
 
         lumpsum = calc_lumpsum(nav_df, total_invest, args.start, end_date, args.fee, dividend_df=dividend_df)
 
-        print_summary(fund_name, args.fund, args.start, end_date, args.freq, args.amount, args.fee,
-                      detail, redeem_fee, final_val, total_ret, ann_ret, mdd, lumpsum)
+        print_summary(
+            fund_name,
+            args.fund,
+            args.start,
+            end_date,
+            args.freq,
+            args.amount,
+            args.fee,
+            detail,
+            redeem_fee,
+            final_val,
+            total_ret,
+            ann_ret,
+            mdd,
+            lumpsum,
+        )
         print_events(events)
         print_detail_table(detail, final_val, total_ret, events)
 

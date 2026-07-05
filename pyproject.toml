@@ -20,6 +20,18 @@ dev = [
     "types-requests>=2.32",
 ]
 
+[project.scripts]
+backtest = "backend.dca_backtest:main"
+collect = "collect_fund_data:main"
+find-scenarios = "tools.find_scenarios:main"
+compare-strategies = "tools.compare_strategies:main"
+build-name-map = "tools.build_index_name_map:main"
+
+[tool.setuptools.packages.find]
+include = ["backend*", "tools*", "app_pages*"]
+[tool.setuptools]
+py-modules = ["collect_fund_data", "db", "app"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"

@@ -25,13 +25,16 @@ logging.basicConfig(
 _TODAY = datetime.now().strftime("%Y%m%d")
 
 _FETCH_API = {
-    ("csindex", "pe"):     (lambda p: ak.stock_zh_index_hist_csindex(p, start_date="20000101", end_date=_TODAY), "滚动市盈率"),
-    ("csindex", "price"):  (lambda p: ak.stock_zh_index_hist_csindex(p, start_date="20000101", end_date=_TODAY), "收盘"),
-    ("market_pe", "pe"):   (lambda p: ak.stock_market_pe_lg(p),          "平均市盈率"),
-    ("market_pe", "pb"):   (lambda p: ak.stock_market_pb_lg(p),          "市净率"),
-    ("index_lg", "pe"):    (lambda p: ak.stock_index_pe_lg(p),           "滚动市盈率"),
-    ("index_lg", "pb"):    (lambda p: ak.stock_index_pb_lg(p),           "市净率"),
-    ("index_lg", "price"): (lambda p: ak.stock_index_pe_lg(p),           "指数"),
+    ("csindex", "pe"): (
+        lambda p: ak.stock_zh_index_hist_csindex(p, start_date="20000101", end_date=_TODAY),
+        "滚动市盈率",
+    ),
+    ("csindex", "price"): (lambda p: ak.stock_zh_index_hist_csindex(p, start_date="20000101", end_date=_TODAY), "收盘"),
+    ("market_pe", "pe"): (lambda p: ak.stock_market_pe_lg(p), "平均市盈率"),
+    ("market_pe", "pb"): (lambda p: ak.stock_market_pb_lg(p), "市净率"),
+    ("index_lg", "pe"): (lambda p: ak.stock_index_pe_lg(p), "滚动市盈率"),
+    ("index_lg", "pb"): (lambda p: ak.stock_index_pb_lg(p), "市净率"),
+    ("index_lg", "price"): (lambda p: ak.stock_index_pe_lg(p), "指数"),
 }
 
 
@@ -48,6 +51,7 @@ def _fetch(source: str, metric: str, param: str) -> pd.DataFrame | None:
     out = df[["日期", col]].dropna().copy()
     out.columns = ["date", "value"]
     return out
+
 
 CONFIG = [
     {
@@ -107,7 +111,9 @@ def rolling_percentile(df: pd.DataFrame, window_days: int, min_periods: int = 60
 # ── 缓存感知的数据获取 ──
 
 
-def get_or_update_series(index_code: str, metric: str, source: str, fetch_fn: Callable[[], pd.DataFrame | None]) -> tuple[pd.DataFrame | None, bool]:
+def get_or_update_series(
+    index_code: str, metric: str, source: str, fetch_fn: Callable[[], pd.DataFrame | None]
+) -> tuple[pd.DataFrame | None, bool]:
     """
     返回 (DataFrame, 是否命中缓存)。
 
@@ -189,7 +195,12 @@ def fetch_series_all() -> list[dict[str, Any]]:
         name = cfg["name"]
         try:
             df_pe, _ = _get_series(cfg, "pe")
-            r = {"name": name, "pe": df_pe if df_pe is not None and not df_pe.empty else None, "pb": None, "price": None}
+            r = {
+                "name": name,
+                "pe": df_pe if df_pe is not None and not df_pe.empty else None,
+                "pb": None,
+                "price": None,
+            }
             if cfg.get("pb"):
                 df_pb, _ = _get_series(cfg, "pb")
                 r["pb"] = df_pb if df_pb is not None and not df_pb.empty else None

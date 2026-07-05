@@ -86,7 +86,13 @@ def _make_percentile_chart(df: pd.DataFrame, label_name: str) -> Figure:
         valid = pct.dropna()
         if len(valid) < 5:
             continue
-        ax.plot(valid.index.values, valid.to_numpy(dtype=float, na_value=float("nan")), lw=1.2, label=f"{year}年滚动百分位", color=colors[year])
+        ax.plot(
+            valid.index.values,
+            valid.to_numpy(dtype=float, na_value=float("nan")),
+            lw=1.2,
+            label=f"{year}年滚动百分位",
+            color=colors[year],
+        )
 
     ax.axhline(70, ls="--", lw=0.8, color="#f44336", alpha=0.5)
     ax.axhline(30, ls="--", lw=0.8, color="#4CAF50", alpha=0.5)

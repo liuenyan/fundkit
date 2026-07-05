@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 from backend.cjk_font import setup_cjk_font
 
 
-def create_chart(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str) -> matplotlib.figure.Figure:
+def create_chart(
+    nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund_name: str
+) -> matplotlib.figure.Figure:
     """生成两面板图表：净值走势+定投成本 / 定投收益率+回撤"""
     setup_cjk_font()
 

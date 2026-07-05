@@ -41,12 +41,15 @@ from tools.find_scenarios import find_scenarios
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="多基金 × 多起点 × 多策略 定投对比")
     p.add_argument("--funds", required=True, help="基金代码，逗号分隔 (如 110026,110020)")
-    p.add_argument("--scenarios", default=None,
-                   help="场景列表 '名称:日期' 逗号分隔 (如 熊市底部:2019-01-10,牛市顶部:2021-07-09)")
-    p.add_argument("--auto-scenarios", default=None,
-                   help="自动寻找场景的参考基金代码（启用后忽略 --scenarios）")
-    p.add_argument("--scenarios-spec", default="牛市顶部:2021,熊市底部:2018-2019,市场平均:2020",
-                   help="配合 --auto-scenarios 使用，指定场景参数 (默认 牛市顶部:2021,熊市底部:2018-2019,市场平均:2020)")
+    p.add_argument(
+        "--scenarios", default=None, help="场景列表 '名称:日期' 逗号分隔 (如 熊市底部:2019-01-10,牛市顶部:2021-07-09)"
+    )
+    p.add_argument("--auto-scenarios", default=None, help="自动寻找场景的参考基金代码（启用后忽略 --scenarios）")
+    p.add_argument(
+        "--scenarios-spec",
+        default="牛市顶部:2021,熊市底部:2018-2019,市场平均:2020",
+        help="配合 --auto-scenarios 使用，指定场景参数 (默认 牛市顶部:2021,熊市底部:2018-2019,市场平均:2020)",
+    )
     p.add_argument("--amount", type=float, default=1000, help="每期基准金额 (默认 1000)")
     p.add_argument("--freq", choices=["daily", "weekly", "biweekly", "monthly"], default="monthly")
     p.add_argument("--fee", type=float, default=0.0015, help="申购费率 (默认 0.0015)")
@@ -88,13 +91,20 @@ def load_ma_buffer(fund_code: str, start_date: str, buffer_days: int = 500) -> p
     return None
 
 
-def run_backtest(fund_code: str, start: str, end: str, amount: float, fee: float,
-                 freq: str, strategy: str,
-                 ma_period: int = 250,
-                 va_target: float = 1000,
-                 va_max_multiple: float = 4.0,
-                 va_min_amount: float = 10.0,
-                 index_ma: bool = False) -> dict:
+def run_backtest(
+    fund_code: str,
+    start: str,
+    end: str,
+    amount: float,
+    fee: float,
+    freq: str,
+    strategy: str,
+    ma_period: int = 250,
+    va_target: float = 1000,
+    va_max_multiple: float = 4.0,
+    va_min_amount: float = 10.0,
+    index_ma: bool = False,
+) -> dict:
     """运行单个回测，返回指标字典"""
     nav_df = fetch_fund_data(fund_code, start, end)
     dividend_df = fetch_dividend_data(fund_code)
@@ -130,14 +140,12 @@ def run_backtest(fund_code: str, start: str, end: str, amount: float, fee: float
                 ma_nav = nav_df
         buy = MovingAverageBuyStrategy(amount, ma_period, fee, ma_nav)
 
-    detail, events, redeem_fee, final_val = simulate_dca(nav_df, invest_dates, buy,
-                                                          dividend_df=dividend_df)
+    detail, events, redeem_fee, final_val = simulate_dca(nav_df, invest_dates, buy, dividend_df=dividend_df)
     total_invest = detail.iloc[-1]["total_invested"]
     total_ret = (final_val - total_invest) / total_invest
     ann_ret = calc_annualized(total_ret, pd.Timestamp(start), pd.Timestamp(end))
     mdd = max_drawdown(detail["total_value"])
-    return dict(total_invest=total_invest, final_val=final_val,
-                total_ret=total_ret, ann_ret=ann_ret, mdd=mdd)
+    return dict(total_invest=total_invest, final_val=final_val, total_ret=total_ret, ann_ret=ann_ret, mdd=mdd)
 
 
 def run_lumpsum(fund_code: str, start: str, end: str, amount: float, fee: float) -> dict | None:
@@ -148,8 +156,7 @@ def run_lumpsum(fund_code: str, start: str, end: str, amount: float, fee: float)
     if result:
         ls_ret = result["return_rate"]
         ann_ret = calc_annualized(ls_ret, pd.Timestamp(start), pd.Timestamp(end))
-        return dict(amount=amount, final_val=result["value_after_fee"],
-                    total_ret=ls_ret, ann_ret=ann_ret, mdd=0.0)
+        return dict(amount=amount, final_val=result["value_after_fee"], total_ret=ls_ret, ann_ret=ann_ret, mdd=0.0)
     return None
 
 
@@ -258,7 +265,13 @@ def main() -> None:
         for scenario_name, start in scenarios:
             try:
                 ref = run_backtest(
-                    fund_code, start, end_date, args.amount, args.fee, args.freq, "fixed",
+                    fund_code,
+                    start,
+                    end_date,
+                    args.amount,
+                    args.fee,
+                    args.freq,
+                    "fixed",
                     ma_period=args.ma_period,
                     va_target=args.va_target,
                     va_max_multiple=args.va_max_multiple,
@@ -275,15 +288,26 @@ def main() -> None:
                 if sname == "lumpsum":
                     ls = run_lumpsum(fund_code, start, end_date, lumpsum_amount, args.fee)
                     if ls:
-                        records.append(dict(
-                            fund_code=fund_code, scenario_name=scenario_name,
-                            start_date=start, strategy="lumpsum",
-                            total_invest=lumpsum_amount, **ls,
-                        ))
+                        records.append(
+                            dict(
+                                fund_code=fund_code,
+                                scenario_name=scenario_name,
+                                start_date=start,
+                                strategy="lumpsum",
+                                total_invest=lumpsum_amount,
+                                **ls,
+                            )
+                        )
                 else:
                     try:
                         r = run_backtest(
-                            fund_code, start, end_date, args.amount, args.fee, args.freq, sname,
+                            fund_code,
+                            start,
+                            end_date,
+                            args.amount,
+                            args.fee,
+                            args.freq,
+                            sname,
                             ma_period=args.ma_period,
                             va_target=args.va_target,
                             va_max_multiple=args.va_max_multiple,
@@ -293,10 +317,15 @@ def main() -> None:
                     except BacktestError as e:
                         print(f"跳过 {fund_code} {scenario_name} {sname}: {e}", file=sys.stderr)
                         continue
-                    records.append(dict(
-                        fund_code=fund_code, scenario_name=scenario_name,
-                        start_date=start, strategy=sname, **r,
-                    ))
+                    records.append(
+                        dict(
+                            fund_code=fund_code,
+                            scenario_name=scenario_name,
+                            start_date=start,
+                            strategy=sname,
+                            **r,
+                        )
+                    )
 
     if not records:
         print("无有效回测结果", file=sys.stderr)

@@ -20,7 +20,14 @@ from backend.dca_backtest import (
     calc_lumpsum,
 )
 from backend.index_fetcher import fetch_index_price, lookup_index
-from backend.strategy import FixedBuyStrategy, MovingAverageBuyStrategy, SellStrategy, TargetProfitSellStrategy, TrailingStopSellStrategy, ValueAveragingBuyStrategy
+from backend.strategy import (
+    FixedBuyStrategy,
+    MovingAverageBuyStrategy,
+    SellStrategy,
+    TargetProfitSellStrategy,
+    TrailingStopSellStrategy,
+    ValueAveragingBuyStrategy,
+)
 import db
 from backend.stats import calc_annualized, max_drawdown
 
@@ -43,7 +50,11 @@ with st.sidebar:
     buy_type = st.selectbox(
         "买入策略",
         ["定期定额", "价值平均", "指数均线"],
-        format_func=lambda x: {"定期定额": "定期定额（每期固定金额）", "价值平均": "价值平均（每期增长固定市值）", "指数均线": "指数均线（低估多买高估少买）"}[x],
+        format_func=lambda x: {
+            "定期定额": "定期定额（每期固定金额）",
+            "价值平均": "价值平均（每期增长固定市值）",
+            "指数均线": "指数均线（低估多买高估少买）",
+        }[x],
     )
 
     amount = 1000.0
@@ -283,9 +294,7 @@ with st.expander("📋 交易明细", expanded=False):
     ).copy()
     out["日期"] = out["日期"].dt.strftime("%Y-%m-%d")
     out["收益率(%)"] = out["收益率(%)"] * 100
-    out["分红再投"] = out["分红再投"].where(out["分红再投"] > 0).apply(
-        lambda x: f"{x:.2f}" if pd.notna(x) else ""
-    )
+    out["分红再投"] = out["分红再投"].where(out["分红再投"] > 0).apply(lambda x: f"{x:.2f}" if pd.notna(x) else "")
     cols = ["日期", "净值", "投入", "申购份额", "分红再投", "累计份额", "市值", "收益率(%)"]
     st.dataframe(out[cols], hide_index=True, use_container_width=True)
 
