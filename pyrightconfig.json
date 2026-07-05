@@ -1,0 +1,18 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.11",
+  "include": [
+    "backend",
+    "tools",
+    "app_pages",
+    "app.py",
+    "collect_fund_data.py",
+    "db.py"
+  ],
+  "exclude": ["tests", ".venv", "venv", "data"],
+  "reportMissingTypeStubs": false,
+  "reportMissingParameterType": false,
+  "reportUnknownMemberType": false
+}

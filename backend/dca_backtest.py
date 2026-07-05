@@ -364,7 +364,7 @@ def simulate_dca(
                 should_sell = True
                 sell_reason = signal.reason
 
-        if should_sell:
+        if should_sell and sell_strategy is not None:
             event = _execute_sell(pos, date, nav, mkt_value, round_return,
                                   sell_reason, redeem_schedule, tp_cycle,
                                   sell_strategy, buy_strategy)

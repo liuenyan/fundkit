@@ -61,7 +61,7 @@ def fetch_index_price_by_target(tracking_target: str) -> pd.DataFrame | None:
     return fetch_index_price(idx_code, src, mkt_prefix)
 
 
-def _fetch_chain(source: str, code: str, market_prefix: str | None = None) -> pd.DataFrame | None:
+def _fetch_chain(source: str | None, code: str, market_prefix: str | None = None) -> pd.DataFrame | None:
     """按 FALLBACK_MAP 链式重试，任一数据源成功则返回。"""
     tried: list[str] = []
     while source is not None:

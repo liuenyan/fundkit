@@ -1,5 +1,6 @@
 charts/
 .venv/
+.vscode/
 __pycache__/
 *.pyc
 data/

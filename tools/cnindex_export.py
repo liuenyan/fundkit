@@ -64,7 +64,7 @@ def fetch_cnindex_list(force: bool = False) -> pd.DataFrame:
     return df
 
 
-def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, str, str]]:
+def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, str | None, str]]:
     """构建股票类指数名称→(代码, 市场前缀, 指数简称) 映射。
 
     映射来源：
@@ -79,7 +79,7 @@ def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, 
     stock = df[df["资产类别"] == "股票"].copy()
     logger.info("股票类指数: %s 条", len(stock))
 
-    name_map: dict[str, Tuple[str, str, str]] = {}
+    name_map: dict[str, Tuple[str, str | None, str]] = {}
     for _, row in stock.iterrows():
         code = str(row["指数代码"]).strip()
         series = str(row["指数系列"]) if pd.notna(row["指数系列"]) else ""

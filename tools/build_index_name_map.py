@@ -76,7 +76,7 @@ def normalize(name: str) -> str:
 
 # ── 手工兜底映射（数据源无法覆盖的条目）──
 
-KNOWN_MAP: dict[str, tuple[str, str, str, str, str]] = {
+KNOWN_MAP: dict[str, tuple[str, str | None, str, str, str]] = {
     # (normalized_name) → (code, market_prefix, source, index_type, short_name)
 
     # CNINDEX 只有"国证新能源车"（无"汽"），聚宽能匹配但已移除
@@ -241,7 +241,7 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
         if nk not in csi_norm_map:
             csi_norm_map[nk] = v
 
-    cnindex_norm_map: dict[str, tuple[str, str, str]] = {}
+    cnindex_norm_map: dict[str, tuple[str, str | None, str]] = {}
     for k, v in cnindex_name_map.items():
         nk = normalize(k)
         if nk not in cnindex_norm_map:
@@ -347,7 +347,7 @@ def build_all_mappings(skip_verify: bool = False) -> tuple[list[dict], list[dict
                     elif code.startswith("399") and _verify_sina_cn(em_prefix, code):
                         source = "sina_cn"
             elif source == "daily_em":
-                verified_ok = _verify_daily_em(prefix, code)
+                verified_ok = _verify_daily_em(prefix or "", code)
             elif source == "sina_hk":
                 verified_ok = _verify_sina_hk(code)
             elif source == "sina_us":

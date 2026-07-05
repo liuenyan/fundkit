@@ -66,7 +66,7 @@ def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[st
 
     load_cached = db.fund_fee.load(all_codes)
 
-    def _persist(code: str, result: dict | None) -> None:
+    def _persist(code: str, result: tuple | None) -> None:
         nonlocal success, failed  # on_result 在主线程串行执行，无需锁
         if result is None:
             failed += 1
@@ -215,8 +215,8 @@ def collect_fund_nav(force: bool = False) -> None:
 
     if not open_df.empty:
         date_str, nav_col, cum_col = _extract_date_from_columns(open_df.columns)
-        if date_str is None:
-            print("  ! 无法从列名解析日期，跳过")
+        if date_str is None or nav_col is None or cum_col is None:
+            print("  ! 无法从列名解析日期/净值列，跳过")
         elif "日增长率" not in open_df.columns:
             print("  ! 缺少 日增长率 列，跳过")
         else:
@@ -238,8 +238,8 @@ def collect_fund_nav(force: bool = False) -> None:
 
     if not etf_df.empty:
         date_str2, nav_col2, cum_col2 = _extract_date_from_columns(etf_df.columns)
-        if date_str2 is None:
-            print("  ! 无法从 ETF 列名解析日期，跳过")
+        if date_str2 is None or nav_col2 is None or cum_col2 is None:
+            print("  ! 无法从 ETF 列名解析日期/净值列，跳过")
         elif "增长率" not in etf_df.columns:
             print("  ! 缺少 增长率 列，跳过")
         else:

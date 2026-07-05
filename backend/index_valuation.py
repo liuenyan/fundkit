@@ -160,7 +160,7 @@ def fetch_all() -> list[dict[str, Any]]:
         name = cfg["name"]
         try:
             df_pe, _ = _get_series(cfg, "pe")
-            if df_pe.empty:
+            if df_pe is None or df_pe.empty:
                 logger.warning("获取 %s 估值失败：PE 数据为空", name)
                 results.append({"name": name, "pe": None, "pct": None, "label": "获取失败"})
                 continue
@@ -170,7 +170,7 @@ def fetch_all() -> list[dict[str, Any]]:
 
             if cfg.get("pb"):
                 df_pb, _ = _get_series(cfg, "pb")
-                if not df_pb.empty:
+                if df_pb is not None and not df_pb.empty:
                     pb = float(df_pb["value"].iloc[-1])
                     pb_pct = calc_percentile(df_pb["value"])
                     r["pb"] = pb
@@ -189,12 +189,12 @@ def fetch_series_all() -> list[dict[str, Any]]:
         name = cfg["name"]
         try:
             df_pe, _ = _get_series(cfg, "pe")
-            r = {"name": name, "pe": df_pe if not df_pe.empty else None, "pb": None, "price": None}
+            r = {"name": name, "pe": df_pe if df_pe is not None and not df_pe.empty else None, "pb": None, "price": None}
             if cfg.get("pb"):
                 df_pb, _ = _get_series(cfg, "pb")
-                r["pb"] = df_pb if not df_pb.empty else None
+                r["pb"] = df_pb if df_pb is not None and not df_pb.empty else None
             df_price, _ = _get_series(cfg, "price")
-            r["price"] = df_price if not df_price.empty else None
+            r["price"] = df_price if df_price is not None and not df_price.empty else None
             results.append(r)
         except Exception:
             logger.warning("获取 %s 序列数据异常", name, exc_info=True)
@@ -257,9 +257,9 @@ def _fetch_dividend_yield(_: object = None) -> pd.DataFrame | None:
 
 def fetch_bond_yield_10y() -> pd.DataFrame | None:
     df, _ = get_or_update_series("中债", "10y", "bond", _fetch_bond_yield_10y)
-    return df if not df.empty else None
+    return df if df is not None and not df.empty else None
 
 
 def fetch_dividend_yield() -> pd.DataFrame | None:
     df, _ = get_or_update_series("000922", "dividend_yield", "csindex_indicator", _fetch_dividend_yield)
-    return df if not df.empty else None
+    return df if df is not None and not df.empty else None

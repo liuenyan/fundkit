@@ -2,7 +2,7 @@
 CJK font setup for matplotlib — extracted for reuse.
 """
 
-import matplotlib as mpl
+import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 
 
@@ -36,7 +36,7 @@ def setup_cjk_font() -> None:
     ):
         for _name in _names:
             try:
-                mpl.font_manager.findfont(_name, fallback_to_default=False)
+                font_manager.findfont(_name, fallback_to_default=False)
                 s += f"{_name}, "
                 break
             except Exception:

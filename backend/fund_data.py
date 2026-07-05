@@ -22,7 +22,7 @@ SORT_OPTIONS = {
 }
 
 
-def fetch_one_overview(code: str) -> tuple[float | None, ...] | None:
+def fetch_one_overview(code: str) -> tuple[Any, ...] | None:
     """单只基金获取管理费/托管费/销售服务费/净资产规模/份额规模/档案信息"""
     try:
         df = ak.fund_overview_em(symbol=code)
@@ -200,7 +200,8 @@ def enrich_fee_scale(result: pd.DataFrame, scale_source: pd.DataFrame | None = N
     """
     result = result.copy()
 
-    nav = pd.to_numeric(result.get("单位净值"), errors="coerce")
+    nav_series = result.get("单位净值")
+    nav = pd.to_numeric(nav_series if nav_series is not None else pd.Series(dtype=float), errors="coerce")
     codes = result["基金代码"].tolist()
 
     (
