@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 
 _TODAY = datetime.now().strftime("%Y%m%d")
 
+# ── 数据源后备链（Chain of Responsibility）──
+# 每个数据源取不到时，按此链路由到下一个备用源，链尾为 None。
+FALLBACK_MAP: dict[str, str | None] = {
+    "csindex":  "daily_em",
+    "daily_em": "sina_cn",
+    "sina_cn":  None,
+    "sina_hk":  None,
+    "sina_us":  None,
+}
+
 
 def lookup_index(tracking_target: str) -> tuple[str, str, str | None] | None:
     """从跟踪标的名称查询 (index_code, source, market_prefix)，未映射则返回 None"""
@@ -34,10 +44,11 @@ def lookup_index(tracking_target: str) -> tuple[str, str, str | None] | None:
 
 
 def fetch_index_price(index_code: str, source: str, market_prefix: str | None = None) -> pd.DataFrame | None:
-    """获取指数历史收盘价，返回 (date, value) DataFrame，经 index_series 缓存。"""
+    """获取指数历史收盘价，返回 (date, value) DataFrame，经 index_series 缓存。
+    若首选 source 取不到，按 FALLBACK_MAP 自动链式重试。"""
     return get_or_update_series(
         index_code, "price", source,
-        lambda: _fetch(source, index_code, market_prefix),
+        lambda: _fetch_chain(source, index_code, market_prefix),
     )[0]
 
 def fetch_index_price_by_target(tracking_target: str) -> pd.DataFrame | None:
@@ -49,17 +60,34 @@ def fetch_index_price_by_target(tracking_target: str) -> pd.DataFrame | None:
     return fetch_index_price(idx_code, src, mkt_prefix)
 
 
-def _fetch(source: str, param: str, market_prefix: str | None = None) -> pd.DataFrame | None:
+def _fetch_chain(source: str, code: str, market_prefix: str | None = None) -> pd.DataFrame | None:
+    """按 FALLBACK_MAP 链式重试，任一数据源成功则返回。"""
+    tried: list[str] = []
+    while source is not None:
+        result = _fetch_one(source, code, market_prefix)
+        if result is not None:
+            if tried:
+                logger.info("链式取价成功: %s (失败 %s → 回退 %s)", source, " → ".join(tried), source)
+            return result
+        tried.append(source)
+        source = FALLBACK_MAP[source]
+    logger.warning("链式取价全部失败: %s", " → ".join(tried + ["None"]))
+    return None
+
+
+def _fetch_one(source: str, code: str, market_prefix: str | None = None) -> pd.DataFrame | None:
+    """纯路由：按 source 派发到对应取价函数，不含任何兜底逻辑。"""
     if source == "csindex":
-        return _fetch_csindex(param)
+        return _fetch_csindex(code)
     elif source == "sina_hk":
-        return _fetch_sina_hk(param)
+        return _fetch_sina_hk(code)
     elif source == "sina_us":
-        return _fetch_sina_us(param)
+        return _fetch_sina_us(code)
     elif source == "sina_cn":
-        return _fetch_sina_cn(param, market_prefix)
+        return _fetch_sina_cn(code, market_prefix)
     elif source == "daily_em":
-        return _fetch_daily_em(f"{market_prefix}{param}" if market_prefix else param)
+        symbol = f"{market_prefix}{code}" if market_prefix else code
+        return _fetch_daily_em(symbol)
     logger.warning("未知数据源: %s", source)
     return None
 
@@ -76,14 +104,6 @@ def _fetch_csindex(code: str) -> pd.DataFrame | None:
         return out
     except Exception as exc:
         logger.warning("csindex 取价失败 %s: %s", code, exc)
-    # 399xxx 系列深证/国证指数：东财 → Sina 兜底
-    if code.startswith("399"):
-        em_symbol = f"sz{code}"
-        result = _fetch_daily_em(em_symbol)
-        if result is not None:
-            return result
-        logger.info("daily_em 失败，回退 sina_cn %s", code)
-        return _fetch_sina_cn(code)
     return None
 
 
