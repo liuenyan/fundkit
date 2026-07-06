@@ -28,7 +28,7 @@ Always use `uv run` (automatically uses project venv).
 ## Key facts
 
 - **Data source**: [AKShare](https://github.com/akfamily/akshare) → 天天基金网, **requires internet**
-- **Tests**: pytest, run via `uv run python -m pytest tests/`
+- **Tests**: pytest (dev dep), run via `uv run --extra dev python -m pytest tests/`
 - **Rename rule**: 同名文件重命名必须用 `git mv`，否则 git 不识别
 - **Code style**: ruff (line-length=120, target-version=py311), managed via `pyproject.toml`
 - **Chart output**: `./charts/<fund_code>_dca_backtest.png` (Auto, `matplotlib.use("Agg")`)
