@@ -11,7 +11,7 @@
     "collect_fund_data.py",
     "db.py"
   ],
-  "exclude": ["tests", ".venv", "venv", "data", "**/node_modules", "**/__pycache__", "**/.*"],
+  "exclude": ["tests", ".venv", "venv", "data", "**/node_modules", "**/__pycache__", "**/*.egg-info", "**/.*"],
   "reportMissingTypeStubs": false,
   "reportMissingParameterType": false,
   "reportUnknownMemberType": false
