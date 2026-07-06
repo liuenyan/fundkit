@@ -30,7 +30,11 @@ def parse_pct_series(s: pd.Series) -> pd.Series:
 
 
 def parse_scale(s: Any) -> float | None:
-    """解析规模字段（标量），处理 亿 / 万 / 裸数字 → float（亿）"""
+    """解析规模字段（标量），处理 亿 / 万 / 裸数字 → float（亿）
+
+    AKShare 返回值始终带"亿元"/"亿份"后缀，裸数字分支仅作为防御性
+    fallback（视为已是亿单位），生产路径不命中。
+    """
     if not s:
         return None
     s = str(s).strip().replace(",", "")
