@@ -8,12 +8,12 @@
 
 ## B. 测试覆盖
 
-- `TargetProfitSellStrategy` — 0 测试
-- `TrailingStopSellStrategy` 回撤触发路径 — 未覆盖
-- `ValueAveragingBuyStrategy` 最大倍数限制 / 最小金额兜底 — 未覆盖
-- `MovingAverageBuyStrategy` 自定义 tier 路径 — 未覆盖
-- `calc_redeem_fee()`、`calc_lumpsum()`、`generate_dca_dates()` 等核心函数 — 无测试
-- `tools/compare_strategies.py`、`find_scenarios.py`、`formatters.py`、`stats.py` — 无测试
+- **[x] `TargetProfitSellStrategy`** — 3 条（触发/不触发/循环）
+- **[x] `TrailingStopSellStrategy` 回撤触发路径** — 1 条（停投→回撤卖出）
+- **[x] `ValueAveragingBuyStrategy` 最大倍数限制 / 最小金额兜底** — 2 条（下跌多投/上涨少投）
+- **[x] `MovingAverageBuyStrategy` 自定义 tier 路径** — 2 条（aggressive 超卖 / default 微低估）
+- **[x] `calc_redeem_fee()` / `calc_lumpsum()` / `generate_dca_dates()` 等核心函数** — 19 条
+- `tools/compare_strategies.py`、`find_scenarios.py`、`formatters.py`、`stats.py` — 无测试（暂不补）
 
 ## C. 回测指标增强
 
