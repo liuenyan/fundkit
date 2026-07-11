@@ -14,6 +14,11 @@ uv run compare-strategies --funds 110026,110020 --scenarios "..."
 
 Always use `uv run` (auto `.venv`). Dev deps: `uv sync --extra dev`.
 
+Skills (按需加载，`.opencode/skills/*/`):
+- **backtest-core** — 策略类细节、simulate_dca 核心循环、赎回费计算
+- **data-flow** — DB 表结构、缓存 TTL、采集流程、AKShare API 映射
+- **index-mapping** — 指数名称→代码映射、KNOWN_MAP、取价路由与回调链
+
 ## Architecture
 
 ```
