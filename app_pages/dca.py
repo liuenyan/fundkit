@@ -29,7 +29,16 @@ from backend.strategy import (
     ValueAveragingBuyStrategy,
 )
 import db
-from backend.stats import calc_annualized, max_drawdown
+from backend.stats import (
+    annualized_volatility,
+    calc_annualized,
+    calmar_ratio,
+    max_drawdown,
+    max_drawdown_duration,
+    profit_loss_ratio,
+    sharpe_ratio,
+    win_rate,
+)
 
 st.set_page_config(page_title="定投回测", page_icon="📊", layout="wide")
 
@@ -253,23 +262,67 @@ c2.metric("期末市值", f"{portfolio_value:,.2f} 元")
 c3.metric("赎回费", f"{redeem_fee:,.2f} 元")
 c4.metric("实际到账", f"{final_val:,.2f} 元")
 
+vol = annualized_volatility(detail["total_value"])
+wr = win_rate(detail["return_rate"])
+plr = profit_loss_ratio(detail["return_rate"])
+dd_dur = max_drawdown_duration(detail["total_value"])
+
 c1, c2, c3 = st.columns(3)
 c1.metric("总收益率", f"{total_ret * 100:.2f}%")
 c2.metric("年化收益率", f"{ann_ret * 100:.2f}%")
 c3.metric("最大回撤", f"{mdd * 100:.2f}%", delta=f"{mdd * 100:.2f}%", delta_color="inverse")
 
+c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1.metric("年化波动率", f"{vol * 100:.2f}%")
+c2.metric("Sharpe", f"{sharpe_ratio(ann_ret, vol):.2f}")
+c3.metric("Calmar", f"{calmar_ratio(ann_ret, mdd):.2f}")
+c4.metric("胜率", f"{wr * 100:.2f}%")
+c5.metric("盈亏比", f"{plr:.2f}")
+c6.metric("最大回撤持续期", f"{dd_dur}天")
+
 fig = make_charts(nav_df, detail, fund_code, fund_name)
 st.pyplot(fig)
 
 if lumpsum:
+    dd_ls = lumpsum["daily_detail"]
+    ls_ret = lumpsum["return_rate"]
+    ls_ann = calc_annualized(ls_ret, dd_ls["date"].iloc[0], dd_ls["date"].iloc[-1])
+    ls_vol = annualized_volatility(dd_ls["total_value"])
+    ls_mdd = max_drawdown(dd_ls["total_value"])
+    ls_sharpe = sharpe_ratio(ls_ann, ls_vol)
+    ls_calmar = calmar_ratio(ls_ann, ls_mdd)
+    ls_wr = win_rate(dd_ls["return_rate"])
+    ls_plr = profit_loss_ratio(dd_ls["return_rate"])
+    ls_dd_dur = max_drawdown_duration(dd_ls["total_value"])
+
     st.subheader("💰 一次性投入对比")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("一次性投入收益率", f"{lumpsum['return_rate'] * 100:.2f}%")
-    c2.metric("定投收益率", f"{total_ret * 100:.2f}%")
-    diff = total_ret - lumpsum["return_rate"]
+    diff = total_ret - ls_ret
     winner = "定投胜 🏆" if diff > 0 else ("一次性投入胜 🏆" if diff < 0 else "持平")
-    c3.metric("差值", f"{diff * 100:+.2f}%")
-    st.info(f"同等金额 **{total_invest:,.2f} 元** → **{winner}**")
+    st.info(f"同等金额 **{total_invest:,.2f} 元** → **{winner}** (差值 {diff * 100:+.2f}%)")
+
+    cols = st.columns(2)
+    with cols[0]:
+        st.caption("**定投**")
+        st.metric("总收益率", f"{total_ret * 100:.2f}%")
+        st.metric("年化收益率", f"{ann_ret * 100:.2f}%")
+        st.metric("最大回撤", f"{mdd * 100:.2f}%")
+        st.metric("年化波动率", f"{vol * 100:.2f}%")
+        st.metric("Sharpe", f"{sharpe_ratio(ann_ret, vol):.2f}")
+        st.metric("Calmar", f"{calmar_ratio(ann_ret, mdd):.2f}")
+        st.metric("胜率", f"{wr * 100:.2f}%")
+        st.metric("盈亏比", f"{plr:.2f}")
+        st.metric("最大回撤持续期", f"{dd_dur}天")
+    with cols[1]:
+        st.caption("**一次性投入**")
+        st.metric("总收益率", f"{ls_ret * 100:.2f}%")
+        st.metric("年化收益率", f"{ls_ann * 100:.2f}%")
+        st.metric("最大回撤", f"{ls_mdd * 100:.2f}%")
+        st.metric("年化波动率", f"{ls_vol * 100:.2f}%")
+        st.metric("Sharpe", f"{ls_sharpe:.2f}")
+        st.metric("Calmar", f"{ls_calmar:.2f}")
+        st.metric("胜率", f"{ls_wr * 100:.2f}%")
+        st.metric("盈亏比", f"{ls_plr:.2f}")
+        st.metric("最大回撤持续期", f"{ls_dd_dur}天")
 
 if events:
     with st.expander(f"📋 止盈事件（共 {len(events)} 次）", expanded=True):

@@ -19,7 +19,16 @@ import pandas as pd
 from backend.charting import create_chart
 from backend.em_fetcher import fetch_nav_data
 from backend.index_fetcher import fetch_index_price, lookup_index
-from backend.stats import calc_annualized, max_drawdown
+from backend.stats import (
+    annualized_volatility,
+    calc_annualized,
+    calmar_ratio,
+    max_drawdown,
+    max_drawdown_duration,
+    profit_loss_ratio,
+    sharpe_ratio,
+    win_rate,
+)
 from backend.strategy import (
     BuyStrategy,
     DCAPosition,
@@ -59,6 +68,7 @@ class LumpSumResult(TypedDict):
     redeem_fee: float
     value_after_fee: float
     return_rate: float
+    daily_detail: pd.DataFrame  # 含 date / total_value / total_invested / return_rate
 
 
 def parse_args() -> argparse.Namespace:
@@ -462,7 +472,7 @@ def calc_lumpsum(
     purchase_rate: float,
     redeem_schedule: list[tuple[int, float]] | None = None,
     dividend_df: pd.DataFrame | None = None,
-) -> LumpSumResult | None:
+) -> dict[str, Any] | None:
     """一次性投入收益计算（基于真实分红数据再投资）"""
     df = nav_df.loc[nav_df["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
     if df.empty:
@@ -473,11 +483,18 @@ def calc_lumpsum(
     units = actual / first["unit_nav"]
     dividend_dict = build_dividend_dict(dividend_df)
 
+    daily_records: list[dict[str, Any]] = []
     for _, row in df.iterrows():
         units += reinvest_dividends(units, row["unit_nav"], row["date"], dividend_dict)
+        daily_value = units * row["unit_nav"]
+        daily_return = (daily_value - amount) / amount
+        daily_records.append(
+            {"date": row["date"], "total_value": daily_value, "total_invested": amount, "return_rate": daily_return}
+        )
 
-    last = df.iloc[-1]
-    val_before = units * last["unit_nav"]
+    daily_detail = pd.DataFrame(daily_records)
+    last = daily_detail.iloc[-1]
+    val_before = last["total_value"]
     hold = (last["date"] - first["date"]).days
     fee_rate = get_redeem_rate(hold, redeem_schedule)
     fee = val_before * fee_rate
@@ -490,6 +507,7 @@ def calc_lumpsum(
         "redeem_fee": fee,
         "value_after_fee": val_after,
         "return_rate": (val_after - amount) / amount,
+        "daily_detail": daily_detail,
     }
 
 
@@ -519,6 +537,19 @@ def plot_results(
     print(f"图表已保存: {path}")
 
 
+def _calc_extra_metrics(total_value: pd.Series, return_rate: pd.Series, ann_ret: float) -> dict[str, float]:
+    vol = annualized_volatility(total_value)
+    mdd_s = max_drawdown(total_value)
+    return {
+        "vol": vol,
+        "sharpe": sharpe_ratio(ann_ret, vol),
+        "calmar": calmar_ratio(ann_ret, mdd_s),
+        "win_rate": win_rate(return_rate),
+        "pl_ratio": profit_loss_ratio(return_rate),
+        "dd_dur": max_drawdown_duration(total_value),
+    }
+
+
 def print_summary(
     fund_name: str,
     fund_code: str,
@@ -533,10 +564,11 @@ def print_summary(
     total_ret: float,
     ann_ret: float,
     mdd: float,
-    lumpsum: LumpSumResult | None,
+    lumpsum: dict[str, Any] | None,
 ) -> None:
     total_invest = detail.iloc[-1]["total_invested"]
     portfolio_value = detail.iloc[-1]["total_value"]
+    em = _calc_extra_metrics(detail["total_value"], detail["return_rate"], ann_ret)
     sep = "=" * 52
     print(f"""
 {sep}
@@ -555,14 +587,32 @@ def print_summary(
 总收益率:      {total_ret * 100:>12.2f}%
 年化收益率:    {ann_ret * 100:>12.2f}%
 最大回撤:      {mdd * 100:>12.2f}%
+年化波动率:    {em["vol"] * 100:>12.2f}%
+Sharpe 比率:   {em["sharpe"]:>12.2f}
+Calmar 比率:   {em["calmar"]:>12.2f}
+胜率:          {em["win_rate"] * 100:>12.2f}%
+盈亏比:        {em["pl_ratio"]:>12.2f}
+最大回撤持续期: {em["dd_dur"]:>8} 天
 
 {"─" * 52}
 一次性投入对比（同等金额 {total_invest:,.2f} 元）:
 """)
     if lumpsum:
+        dd = lumpsum["daily_detail"]
+        lumpsum_ret = lumpsum["return_rate"]
+        lumpsum_ann = calc_annualized(lumpsum_ret, dd["date"].iloc[0], dd["date"].iloc[-1])
+        ls_em = _calc_extra_metrics(dd["total_value"], dd["return_rate"], lumpsum_ann)
+
         print(f"  最终价值:    {lumpsum['value_after_fee']:>12,.2f} 元")
-        print(f"  收益率:      {lumpsum['return_rate'] * 100:>12.2f}%")
-        diff = total_ret - lumpsum["return_rate"]
+        print(f"  收益率:      {lumpsum_ret * 100:>12.2f}%")
+        print(f"  年化收益率:  {lumpsum_ann * 100:>12.2f}%")
+        print(f"  最大回撤:    {max_drawdown(dd['total_value']) * 100:>12.2f}%")
+        print(f"  年化波动率:  {ls_em['vol'] * 100:>12.2f}%")
+        print(f"  Sharpe 比率: {ls_em['sharpe']:>12.2f}")
+        print(f"  Calmar 比率: {ls_em['calmar']:>12.2f}")
+        print(f"  胜率:        {ls_em['win_rate'] * 100:>12.2f}%")
+        print(f"  盈亏比:      {ls_em['pl_ratio']:>12.2f}")
+        diff = total_ret - lumpsum_ret
         winner = "定投胜" if diff > 0 else ("一次性投入胜" if diff < 0 else "持平")
         print(f"  差值:        {diff * 100:>+12.2f}%  ({winner})")
     print(sep)
