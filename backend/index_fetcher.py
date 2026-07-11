@@ -11,6 +11,7 @@ from datetime import datetime
 
 import akshare as ak
 import pandas as pd
+import requests
 
 import db
 from backend.index_valuation import get_or_update_series
@@ -28,6 +29,7 @@ FALLBACK_MAP: dict[str, str | None] = {
     "sina_cn": None,
     "sina_hk": None,
     "sina_us": None,
+    "hsi": "sina_hk",
 }
 
 
@@ -87,6 +89,8 @@ def _fetch_one(source: str, code: str, market_prefix: str | None = None) -> pd.D
         return _fetch_sina_hk(code)
     elif source == "sina_us":
         return _fetch_sina_us(code)
+    elif source == "hsi":
+        return _fetch_hsi(code)
     elif source == "sina_cn":
         symbol = f"{market_prefix}{code}" if market_prefix else code
         return _fetch_sina_cn(symbol)
@@ -136,3 +140,50 @@ _fetch_daily_em = _fetch_with(
 _fetch_sina_cn = _fetch_with(ak.stock_zh_index_daily)
 _fetch_sina_hk = _fetch_with(ak.stock_hk_index_daily_sina)
 _fetch_sina_us = _fetch_with(ak.index_us_stock_sina)
+
+
+def _fetch_hsi(symbol: str) -> pd.DataFrame | None:
+    """从恒生指数公司官网 chart-rebased.json 获取指数历史收盘价。
+    symbol 为恒生指数代码（如 HSI, HSCEI, HSTECH, HSSCNE 等）。
+    网站 API 使用小写代码路径（hsi, hscei, hstech, hsscne）。
+    返回的 indexLevels-Xy 均为基准化值（period start=100），
+    通过 previousClose 换算为实际收盘价。
+    """
+    try:
+        code = symbol.lower()
+        url = f"https://www.hsi.com.hk/data/eng/index-series/{code}/chart-rebased.json"
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        series = data["indexSeriesList"][0]
+        entry = series["indexList"][0]
+
+        prev_close = entry.get("previousClose")
+        if not prev_close:
+            return None
+        actual_close = float(prev_close)
+
+        # 取数据最长的 period（5y > 3y > 1y > 6m > ytd > 3m > 1m）
+        best_key = None
+        for suffix in ["-5y", "-3y", "-1y", "-6m", "-ytd", "-3m", "-1m"]:
+            key = f"indexLevels{suffix}"
+            if key in entry and len(entry[key]) > 0:
+                best_key = key
+                break
+        if best_key is None:
+            return None
+
+        raw = entry[best_key]
+        last_rebased = raw[-1][1]
+        factor = actual_close / last_rebased
+
+        records = []
+        for ts_ms, rebased in raw:
+            dt = datetime.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
+            records.append({"date": dt, "value": round(rebased * factor, 2)})
+
+        df = pd.DataFrame(records)
+        return df
+    except Exception as exc:
+        logger.warning("HSI API 取价失败 %s: %s", symbol, exc)
+        return None

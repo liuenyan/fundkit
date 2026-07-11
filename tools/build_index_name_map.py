@@ -145,6 +145,7 @@ KNOWN_MAP: dict[str, tuple[str, str | None, str, str, str]] = {
     "恒生": ("HSI", None, "sina_hk", "equity", "恒生指数"),
     "恒生中国企业": ("HSCEI", None, "sina_hk", "equity", "恒生国企"),
     "恒生科技": ("HSTECH", None, "sina_hk", "equity", "恒生科技"),
+    "恒生港股通新经济": ("HSSCNE", None, "hsi", "equity", "港股通新经济"),
     # 美股系列 via index_us_stock_sina
     "纳斯达克100": (".NDX", None, "sina_us", "equity", "纳指100"),
     "道琼斯工业平均": (".DJI", None, "sina_us", "equity", "道琼斯"),

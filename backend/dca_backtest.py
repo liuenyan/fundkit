@@ -759,7 +759,24 @@ def main() -> None:
                     if price_df is not None and not price_df.empty:
                         price_df = price_df.rename(columns={"value": "acc_nav"})
                         price_df["date"] = pd.to_datetime(price_df["date"])
-                        ma_nav = price_df
+                        if len(price_df) < args.ma_period:
+                            print(f"指数价格仅{len(price_df)}条数据，不足{args.ma_period}日均线所需，回退基金净值")
+                            ma_nav = nav_df
+                        else:
+                            # 对齐到基金交易日：merge 到 nav_df 日期上，前向填充
+                            s = price_df.set_index("date")["acc_nav"]
+                            aligned = nav_df[["date"]].copy()
+                            aligned = aligned.merge(s.to_frame(), left_on="date", right_index=True, how="left")
+                            aligned["acc_nav"] = aligned["acc_nav"].ffill()
+                            # 补 warmup：取指数价格在首次基金净值日之前的行
+                            first_fund = nav_df["date"].min()
+                            warmup = price_df[price_df["date"] < first_fund].copy()
+                            if not warmup.empty:
+                                warmup = warmup[["date", "acc_nav"]]
+                                ma_nav = pd.concat([warmup, aligned], ignore_index=True)
+                            else:
+                                ma_nav = aligned
+                            ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
                     else:
                         print("指数价格获取失败，回退基金净值")
                         ma_nav = nav_df
