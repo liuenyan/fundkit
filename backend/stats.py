@@ -25,9 +25,30 @@ def calc_percentile(series: pd.Series) -> float | None:
     return float((s < s.iloc[-1]).mean() * 100)
 
 
-def annualized_volatility(total_value: pd.Series) -> float:
-    daily_ret = total_value.pct_change().dropna()
-    return float(daily_ret.std() * math.sqrt(252))
+def annualized_volatility(
+    total_value: pd.Series,
+    total_invested: pd.Series | None = None,
+    dates: pd.Series | None = None,
+) -> float:
+    """年化波动率
+
+    用 profit.diff() 剔除定投新增投入和分红的影响，
+    并通过 dates 推断数据频率进行年化换算。
+    """
+    if total_invested is not None:
+        profit = total_value - total_invested
+        ret = profit.diff() / total_value.shift(1)
+    else:
+        ret = total_value.pct_change()
+    ret = ret.dropna()
+    if len(ret) < 2:
+        return 0.0
+    if dates is not None and len(dates) > 1:
+        gap = max((dates.iloc[-1] - dates.iloc[0]).days / (len(dates) - 1), 1)
+        periods_per_year = 365 / gap
+    else:
+        periods_per_year = 252
+    return float(ret.std() * math.sqrt(periods_per_year))
 
 
 def sharpe_ratio(annualized_ret: float, annualized_vol: float, risk_free: float = 0.0) -> float:
@@ -56,15 +77,25 @@ def profit_loss_ratio(return_rate: pd.Series) -> float:
     return float(gains.mean() / abs(losses.mean()))
 
 
-def max_drawdown_duration(total_value: pd.Series) -> int:
+def max_drawdown_duration(total_value: pd.Series, dates: pd.Series | None = None) -> int:
+    """最大回撤持续期（自然日），dates 为 None 时返回数据点个数"""
     peak = total_value.expanding().max()
     underwater = total_value < peak
-    streak = max_streak = 0
-    for val in underwater:
+    streak = max_streak = streak_start = 0
+    best_start = best_end = 0
+    for i, val in enumerate(underwater):
         if val:
+            if streak == 0:
+                streak_start = i
             streak += 1
-        else:
             if streak > max_streak:
                 max_streak = streak
+                best_start = streak_start
+                best_end = i + 1
+        else:
             streak = 0
-    return max(max_streak, streak)
+    if max_streak == 0:
+        return 0
+    if dates is not None and best_end > best_start:
+        return (dates.iloc[min(best_end, len(dates) - 1)] - dates.iloc[best_start]).days
+    return max_streak

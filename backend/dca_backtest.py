@@ -537,8 +537,14 @@ def plot_results(
     print(f"图表已保存: {path}")
 
 
-def _calc_extra_metrics(total_value: pd.Series, return_rate: pd.Series, ann_ret: float) -> dict[str, float]:
-    vol = annualized_volatility(total_value)
+def _calc_extra_metrics(
+    total_value: pd.Series,
+    return_rate: pd.Series,
+    ann_ret: float,
+    total_invested: pd.Series | None = None,
+    dates: pd.Series | None = None,
+) -> dict[str, float]:
+    vol = annualized_volatility(total_value, total_invested, dates)
     mdd_s = max_drawdown(total_value)
     return {
         "vol": vol,
@@ -546,7 +552,7 @@ def _calc_extra_metrics(total_value: pd.Series, return_rate: pd.Series, ann_ret:
         "calmar": calmar_ratio(ann_ret, mdd_s),
         "win_rate": win_rate(return_rate),
         "pl_ratio": profit_loss_ratio(return_rate),
-        "dd_dur": max_drawdown_duration(total_value),
+        "dd_dur": max_drawdown_duration(total_value, dates),
     }
 
 
@@ -568,7 +574,9 @@ def print_summary(
 ) -> None:
     total_invest = detail.iloc[-1]["total_invested"]
     portfolio_value = detail.iloc[-1]["total_value"]
-    em = _calc_extra_metrics(detail["total_value"], detail["return_rate"], ann_ret)
+    em = _calc_extra_metrics(
+        detail["total_value"], detail["return_rate"], ann_ret, detail["total_invested"], detail["date"]
+    )
     sep = "=" * 52
     print(f"""
 {sep}
@@ -601,7 +609,7 @@ Calmar 比率:   {em["calmar"]:>12.2f}
         dd = lumpsum["daily_detail"]
         lumpsum_ret = lumpsum["return_rate"]
         lumpsum_ann = calc_annualized(lumpsum_ret, dd["date"].iloc[0], dd["date"].iloc[-1])
-        ls_em = _calc_extra_metrics(dd["total_value"], dd["return_rate"], lumpsum_ann)
+        ls_em = _calc_extra_metrics(dd["total_value"], dd["return_rate"], lumpsum_ann, dd["total_invested"], dd["date"])
 
         print(f"  最终价值:    {lumpsum['value_after_fee']:>12,.2f} 元")
         print(f"  收益率:      {lumpsum_ret * 100:>12.2f}%")

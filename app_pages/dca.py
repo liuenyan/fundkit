@@ -262,10 +262,10 @@ c2.metric("期末市值", f"{portfolio_value:,.2f} 元")
 c3.metric("赎回费", f"{redeem_fee:,.2f} 元")
 c4.metric("实际到账", f"{final_val:,.2f} 元")
 
-vol = annualized_volatility(detail["total_value"])
+vol = annualized_volatility(detail["total_value"], detail["total_invested"], detail["date"])
 wr = win_rate(detail["return_rate"])
 plr = profit_loss_ratio(detail["return_rate"])
-dd_dur = max_drawdown_duration(detail["total_value"])
+dd_dur = max_drawdown_duration(detail["total_value"], detail["date"])
 
 c1, c2, c3 = st.columns(3)
 c1.metric("总收益率", f"{total_ret * 100:.2f}%")
@@ -287,13 +287,13 @@ if lumpsum:
     dd_ls = lumpsum["daily_detail"]
     ls_ret = lumpsum["return_rate"]
     ls_ann = calc_annualized(ls_ret, dd_ls["date"].iloc[0], dd_ls["date"].iloc[-1])
-    ls_vol = annualized_volatility(dd_ls["total_value"])
+    ls_vol = annualized_volatility(dd_ls["total_value"], dd_ls["total_invested"], dd_ls["date"])
     ls_mdd = max_drawdown(dd_ls["total_value"])
     ls_sharpe = sharpe_ratio(ls_ann, ls_vol)
     ls_calmar = calmar_ratio(ls_ann, ls_mdd)
     ls_wr = win_rate(dd_ls["return_rate"])
     ls_plr = profit_loss_ratio(dd_ls["return_rate"])
-    ls_dd_dur = max_drawdown_duration(dd_ls["total_value"])
+    ls_dd_dur = max_drawdown_duration(dd_ls["total_value"], dd_ls["date"])
 
     st.subheader("💰 一次性投入对比")
     diff = total_ret - ls_ret
