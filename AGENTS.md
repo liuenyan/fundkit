@@ -66,10 +66,10 @@ main()                          # backend/dca_backtest.py
 - **Redeem fee**: `calc_redeem_fee(fee_batches, date, nav, redeem_schedule)` — 计算全部申购批次赎回费
 - **Git**: 代码默认不提交，需用户审查确认后再执行 `git commit`
 - **提交信息**: 必须描述实际代码逻辑变更，不能只写 "ruff format" / "fix ruff" 等泛泛描述。提交前执行 `git diff --cached` 确认变更内容
+- **Git**: rename same-name files with `git mv`, otherwise git won't track
 
 ## Caveats
 
 - `generate_dca_dates()` skips date silently if no trading day found within 10 forward days
 - `round_return` can exceed take-profit threshold if NAV gaps significantly between trading days (e.g. 110026). Mathematically correct.
 - Monthly `--day` clamped to 28 (Chinese funds always have NAV on/before 28th)
-- Git: rename same-name files with `git mv`, otherwise git won't track
