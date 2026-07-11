@@ -31,6 +31,8 @@ class BuyAction:
 
     amount: float = 0.0  # 总投入金额（含申购费），0 = 不投
     fee_rate: float = 0.0  # 申购费率（如 0.0015）
+    deviation: float | None = None  # (当前价 - 均线) / 均线，仅 MA 策略使用
+    multiplier: float | None = None  # 实际买入倍数（如 2.0），仅 MA 策略使用
 
 
 class BuyStrategy(ABC):
@@ -89,7 +91,12 @@ class MovingAverageBuyStrategy(BuyStrategy):
         deviation = (current - ma) / ma
         multiple = self._deviation_to_multiple(deviation)
         amount = self.base_amount * multiple
-        return BuyAction(amount=max(amount, 0) if amount > 0 else 0, fee_rate=self.purchase_rate)
+        return BuyAction(
+            amount=max(amount, 0) if amount > 0 else 0,
+            fee_rate=self.purchase_rate,
+            deviation=deviation,
+            multiplier=multiple,
+        )
 
     def _deviation_to_multiple(self, deviation: float) -> float:
         for i, threshold in enumerate(self.tiers):

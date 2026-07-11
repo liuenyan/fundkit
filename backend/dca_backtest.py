@@ -328,12 +328,14 @@ def _build_record(
     div_units: float,
     pos: DCAPosition,
     mkt_value: float,
+    deviation: float | None = None,
+    multiplier: float | None = None,
 ) -> dict[str, Any]:
     """构建单日快照记录"""
     total_value = mkt_value + pos.total_recovered
     overall_profit = total_value - pos.total_invested
     overall_return = overall_profit / pos.total_invested if pos.total_invested > 0 else 0.0
-    return {
+    rec: dict[str, Any] = {
         "date": date,
         "nav": nav,
         "investment": inv_today,
@@ -347,6 +349,10 @@ def _build_record(
         "total_invested": pos.total_invested,
         "total_value": total_value,
     }
+    if deviation is not None:
+        rec["deviation"] = deviation
+        rec["multiplier"] = multiplier
+    return rec
 
 
 def simulate_dca(
@@ -388,6 +394,9 @@ def simulate_dca(
             inv_today = action.amount
             pos.fee_batches.append({"date": date, "units": unit_added})
 
+        deviation = action.deviation
+        multiplier = action.multiplier
+
         # ── 持仓市值 ──
         if pos.units > 0:
             mkt_value = pos.units * nav
@@ -426,7 +435,9 @@ def simulate_dca(
 
         # ── 记录 ──
         if stop_profit_on or date in invest_set or div_units > 0:
-            records.append(_build_record(date, nav, inv_today, unit_added, div_units, pos, mkt_value))
+            records.append(
+                _build_record(date, nav, inv_today, unit_added, div_units, pos, mkt_value, deviation, multiplier)
+            )
 
     detail = pd.DataFrame(records)
     if detail.empty:
@@ -588,6 +599,8 @@ def print_detail_table(detail: pd.DataFrame, final_val: float, total_ret: float,
         display = detail
 
     has_div = display["dividend_units"].sum() > 0
+    has_ma = "deviation" in display.columns and display["deviation"].notna().any()
+
     cols = ["日期", "净值", "投入", "定投份额", "累计份额", "市值", "收益率"]
     widths = [12, 8, 8, 8, 10, 10, 8]
     sep_len = 70
@@ -595,6 +608,12 @@ def print_detail_table(detail: pd.DataFrame, final_val: float, total_ret: float,
         cols.insert(4, "分红份额")
         widths.insert(4, 8)
         sep_len = 80
+    if has_ma:
+        # 在"投入"之前插入"偏离"和"倍数"
+        idx = cols.index("投入")
+        cols[idx:idx] = ["偏离", "倍数"]
+        widths[idx:idx] = [8, 6]
+        sep_len += 16
 
     header = " ".join(f"{c:<{w}}" if i == 0 else f"{c:>{w}}" for i, (c, w) in enumerate(zip(cols, widths)))
     print(header)
@@ -604,6 +623,19 @@ def print_detail_table(detail: pd.DataFrame, final_val: float, total_ret: float,
         cells = [
             f"{r['date'].strftime('%Y-%m-%d'):<12}",
             f"{r['nav']:>8.4f}",
+        ]
+        if has_ma:
+            d = r.get("deviation")
+            if pd.notna(d):
+                cells.append(f"{d * 100:>8.2f}%")
+            else:
+                cells.append(f"{'':>8}")
+            m = r.get("multiplier")
+            if pd.notna(m):
+                cells.append(f"{m:>5.1f}x")
+            else:
+                cells.append(f"{'':>6}")
+        cells += [
             f"{r['investment']:>8.0f}",
             f"{r['units_added']:>8.2f}",
         ]
@@ -620,6 +652,10 @@ def print_detail_table(detail: pd.DataFrame, final_val: float, total_ret: float,
     summary_cells = [
         f"{'合计':<12}",
         f"{'':>8}",
+    ]
+    if has_ma:
+        summary_cells += [f"{'':>8}", f"{'':>6}"]
+    summary_cells += [
         f"{total_invest:>8.0f}",
         f"{'':>8}",
     ]

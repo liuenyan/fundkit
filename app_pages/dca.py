@@ -309,12 +309,21 @@ with st.expander("📋 交易明细", expanded=False):
             "total_units": "累计份额",
             "market_value": "市值",
             "return_rate": "收益率(%)",
+            "deviation": "偏离",
+            "multiplier": "倍数",
         }
     ).copy()
     out["日期"] = out["日期"].dt.strftime("%Y-%m-%d")
     out["收益率(%)"] = out["收益率(%)"] * 100
     out["分红再投"] = out["分红再投"].where(out["分红再投"] > 0).apply(lambda x: f"{x:.2f}" if pd.notna(x) else "")
-    cols = ["日期", "净值", "投入", "申购份额", "分红再投", "累计份额", "市值", "收益率(%)"]
+    has_ma = "偏离" in out.columns and out["偏离"].notna().any()
+    if has_ma:
+        out["偏离"] = out["偏离"].where(out["偏离"].notna()).apply(lambda x: f"{x * 100:.2f}%" if pd.notna(x) else "")
+        out["倍数"] = out["倍数"].where(out["倍数"].notna()).apply(lambda x: f"{x:.1f}x" if pd.notna(x) else "")
+    cols = ["日期", "净值"]
+    if has_ma:
+        cols += ["偏离", "倍数"]
+    cols += ["投入", "申购份额", "分红再投", "累计份额", "市值", "收益率(%)"]
     st.dataframe(out[cols], hide_index=True, use_container_width=True)
 
 csv = detail.to_csv(index=False, encoding="utf-8-sig").encode()
