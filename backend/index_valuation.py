@@ -172,7 +172,13 @@ def fetch_all() -> list[dict[str, Any]]:
                 continue
             pe = float(df_pe["value"].iloc[-1])
             pct = calc_percentile(df_pe["value"])
-            r = {"name": name, "pe": pe, "pct": pct, "label": get_label(pct)}
+            r = {"name": name, "pe": pe, "pct": pct, "label": get_label(pct), "ma250_dev": None}
+
+            df_price, _ = _get_series(cfg, "price")
+            if df_price is not None and len(df_price) >= 250:
+                s = df_price.sort_values("date").set_index("date")["value"]
+                ma250 = s.rolling(250, min_periods=250).mean()
+                r["ma250_dev"] = (s.iloc[-1] - ma250.iloc[-1]) / ma250.iloc[-1]
 
             if cfg.get("pb"):
                 df_pb, _ = _get_series(cfg, "pb")

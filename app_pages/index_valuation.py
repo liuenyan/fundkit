@@ -22,6 +22,7 @@ st.set_page_config(page_title="指数估值", page_icon="📈", layout="centered
 
 st.title("📈 指数估值百分位")
 st.markdown("数据来源：中证指数 / 乐咕乐股（via AKShare）· 需联网")
+st.caption("🔵 低估  🟢 适中  🔴 高估  ⚪ 数据不足")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -65,7 +66,16 @@ for r in data:
             cols[3].metric("PB", "—", delta_color="off")
             cols[4].metric("PB%", "—", delta_color="off")
 
-        cols[5].markdown(f"### {r['label']}")
+        ma250_dev = r.get("ma250_dev")
+        if ma250_dev is not None:
+            pct = ma250_dev * 100
+            color = "green" if pct <= -5 else "red" if pct >= 5 else "gray"
+            cols[5].markdown(
+                f"**MA250偏**<br><span style='color:{color};font-size:1.3rem'>{pct:+.1f}%</span>",
+                unsafe_allow_html=True,
+            )
+        else:
+            cols[5].metric("MA250偏", "—", delta_color="off")
 
 
 WINDOWS_CAL_DAYS = {5: 1825, 10: 3650}
