@@ -50,11 +50,36 @@ def make_charts(nav_df: pd.DataFrame, detail: pd.DataFrame, fund_code: str, fund
 with st.sidebar:
     st.header("⚙️ 回测参数")
 
-    params = st.query_params
-    default_code = params.get("fund", "163415")
-    if "fund" in params:
-        del params["fund"]
+    if "picked_fund" in st.session_state:
+        st.session_state["fund_code_input"] = st.session_state.pop("picked_fund")
+    elif "fund" in st.query_params:
+        st.session_state["fund_code_input"] = st.query_params["fund"]
+    default_code: str = st.session_state.get("fund_code_input", "163415")
     fund_code = st.text_input("基金代码（6位）", default_code, key="fund_code_input", help="例：163415 = 兴全商业模式")
+
+    search_kw = st.text_input(
+        "🔍 搜索基金", placeholder="名称/代码/拼音", key="fund_search_input", label_visibility="collapsed"
+    )
+    if search_kw:
+        catalog = db.fund_catalog.load()
+        if catalog is not None:
+            mask = (
+                catalog["基金代码"].str.contains(search_kw, na=False)
+                | catalog["基金简称"].str.contains(search_kw, na=False)
+                | catalog["拼音缩写"].str.contains(search_kw, na=False)
+            )
+            results = catalog[mask].head(20)
+            if not results.empty:
+                labels = results["基金代码"] + " — " + results["基金简称"]
+                selected_label = st.selectbox("匹配结果，点击选中", labels, key="fund_search_results")
+                if selected_label:
+                    picked = selected_label.split(" — ")[0]
+                    if st.button("✓ 选择此基金", key="fund_pick_btn", type="primary"):
+                        st.session_state["picked_fund"] = picked
+                        del st.session_state["fund_search_input"]
+                        st.rerun()
+            else:
+                st.caption("未找到匹配基金")
 
     buy_type = st.selectbox(
         "买入策略",
