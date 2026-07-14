@@ -18,6 +18,18 @@ from backend.pension_fund import (
 
 st.set_page_config(page_title="养老金选基", page_icon="🏦", layout="centered")
 
+st.markdown(
+    """
+<style>
+div[data-testid="column"] div[data-testid="stButton"] {
+    display: flex;
+    justify-content: center;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 st.title("🏦 养老金选基")
 st.markdown("筛选个人养老金账户（Y份额）可投资的基金。费率与净值均从本地缓存读取，无需等待。")
 
@@ -48,14 +60,14 @@ for i, (_, row) in enumerate(result.iterrows()):
     cat_label = row["养老金分类"]
     cat_icon = CATEGORY_LABELS.get(cat_label, "")
     with st.container(border=True):
-        cols = st.columns([1.3, 2.5, 0.7, 0.7, 1.5, 0.8, 1])
+        cols = st.columns([1.3, 2.2, 0.7, 0.7, 1.3, 0.7, 0.7])
         cols[0].markdown(f"**{row['基金代码']}**")
         cols[1].markdown(f"{row['基金名称']}")
         cols[2].markdown(f"{cat_icon} {cat_label.split('-')[-1]}")
         cols[3].markdown(f"净值: {fmt_nav(row['单位净值'])}")
         cols[4].markdown(f"费率: {fmt_total_fee(row)}")
         cols[5].markdown(f"规模: {fmt_scale(row.get('基金规模'))}")
-        if cols[6].button("📊 定投回测", key=f"dca_{row['基金代码']}_{i}", use_container_width=True):
+        if cols[6].button("📊", key=f"dca_{row['基金代码']}_{i}", help="定投回测"):
             st.switch_page("app_pages/dca.py", query_params={"fund": row["基金代码"]})
 
 with st.expander("📋 完整列表", expanded=False):

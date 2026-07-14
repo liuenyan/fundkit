@@ -19,6 +19,18 @@ from backend.index_fund import (
 
 st.set_page_config(page_title="指数选基", page_icon="🎯", layout="centered")
 
+st.markdown(
+    """
+<style>
+div[data-testid="column"] div[data-testid="stButton"] {
+    display: flex;
+    justify-content: center;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 st.title("🎯 指数选基")
 st.markdown("选择一个指数，查看跟踪该指数的所有基金")
 
@@ -112,14 +124,21 @@ if index_name:
 
     for i, (_, row) in enumerate(display.iterrows()):
         with st.container(border=True):
-            cols = st.columns([1.3, 2.5, 1, 0.8, 1.5, 0.8, 1])
+            cols = st.columns([1.3, 2.2, 1, 0.8, 1.3, 0.7, 0.7])
             cols[0].markdown(f"**{row['代码']}**")
             cols[1].markdown(row["基金名称"])
             cols[2].markdown(f"净值: {row['最新净值']}")
-            cols[3].markdown(f"涨跌: {row['日涨跌']}")
+            change = row["日涨跌"]
+            if change == "—":
+                colored_change = change
+            elif change.startswith("-"):
+                colored_change = f'<span style="color:#00a800">{change}</span>'
+            else:
+                colored_change = f'<span style="color:#cf0000">+{change}</span>'
+            cols[3].markdown(f"涨跌: {colored_change}", unsafe_allow_html=True)
             cols[4].markdown(f"费率: {row['综合费率']}")
             cols[5].markdown(f"规模: {row['基金规模']}")
-            if cols[6].button("📊 定投回测", key=f"dca_{row['代码']}_{i}", use_container_width=True):
+            if cols[6].button("📊", key=f"dca_{row['代码']}_{i}", help="定投回测"):
                 st.switch_page("app_pages/dca.py", query_params={"fund": row["代码"]})
 
     with st.expander("📋 完整列表", expanded=False):

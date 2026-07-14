@@ -18,6 +18,18 @@ from backend.fund_query import (
 
 st.set_page_config(page_title="基金查询", page_icon="🔍", layout="centered")
 
+st.markdown(
+    """
+<style>
+div[data-testid="column"] div[data-testid="stButton"] {
+    display: grid;
+    place-items: center;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 st.title("🔍 基金查询")
 st.markdown("从全市场基金中，按名称、公司、经理、类型等条件筛选")
 
@@ -101,6 +113,8 @@ display = result[
         "成立日期",
         "跟踪标的",
         "跟踪方式",
+        "起购金额",
+        "业绩比较基准",
     ]
 ].copy()
 
@@ -132,6 +146,8 @@ display = display.rename(
         "成立日期": "成立日期",
         "跟踪标的": "跟踪标的",
         "跟踪方式": "跟踪方式",
+        "起购金额": "起购金额",
+        "业绩比较基准": "业绩比较基准",
     }
 )
 
@@ -139,16 +155,32 @@ if show_limit:
     st.info(f"显示前 {CARD_LIMIT} 只，完整列表请展开下方「📋 完整列表」")
 
 for i, (_, row) in enumerate(display.head(CARD_LIMIT).iterrows()):
+    code = row["代码"]
+    is_open = st.session_state.get("detail_fund") == code
     with st.container(border=True):
-        cols = st.columns([1.2, 2.5, 1, 0.8, 1.5, 0.8, 1])
-        cols[0].markdown(f"**{row['代码']}**")
+        cols = st.columns([1.0, 2.0, 0.8, 0.6, 1.0, 0.6, 0.8, 0.8])
+        cols[0].markdown(f"**{code}**")
         cols[1].markdown(row["基金名称"])
         cols[2].markdown(f"净值: {row['最新净值']}")
-        cols[3].markdown(f"涨跌: {row['日涨跌']}")
+        change = row["日涨跌"]
+        if change == "—":
+            colored_change = change
+        elif change.startswith("-"):
+            colored_change = f'<span style="color:#00a800">{change}</span>'
+        else:
+            colored_change = f'<span style="color:#cf0000">+{change}</span>'
+        cols[3].markdown(f"涨跌: {colored_change}", unsafe_allow_html=True)
         cols[4].markdown(f"费率: {row['综合费率']}")
         cols[5].markdown(f"规模: {row['基金规模']}")
-        if cols[6].button("📊 定投回测", key=f"dca_{row['代码']}_{i}", use_container_width=True):
-            st.switch_page("app_pages/dca.py", query_params={"fund": row["代码"]})
+        toggle_label = "🔽" if is_open else "📋"
+        if cols[6].button("📊", key=f"dca_{code}_{i}", help="定投回测"):
+            st.switch_page("app_pages/dca.py", query_params={"fund": code})
+        if cols[7].button(toggle_label, key=f"detail_{code}_{i}", help="查看基金详情"):
+            if is_open:
+                del st.session_state["detail_fund"]
+            else:
+                st.session_state["detail_fund"] = code
+            st.rerun()
         extra = []
         if row.get("基金公司"):
             extra.append(f"🏢 {row['基金公司']}")
@@ -156,6 +188,34 @@ for i, (_, row) in enumerate(display.head(CARD_LIMIT).iterrows()):
             extra.append(f"👤 {row['基金经理']}")
         if extra:
             st.caption(" | ".join(extra))
+
+    if is_open:
+        with st.container(border=True):
+            mc1, mc2, mc3 = st.columns(3)
+            delta = row["日涨跌"]
+            if delta not in ("—", "") and not delta.startswith("-"):
+                delta = f"+{delta}"
+            mc1.metric("最新净值", row["最新净值"], delta, delta_color="inverse")
+            mc2.metric("综合费率", row["综合费率"].split()[0])
+            mc3.metric("基金规模", row["基金规模"])
+
+            st.markdown(
+                f"**类型** {row['基金类型']}　"
+                f"**公司** {row.get('基金公司', '—')}　"
+                f"**经理** {row.get('基金经理', '—')}　"
+                f"**成立** {row.get('成立日期', '—')}"
+            )
+            st.markdown(f"**跟踪标的** {row.get('跟踪标的', '—')}　**跟踪方式** {row.get('跟踪方式', '—')}")
+            st.markdown(
+                f"**申购费** {row['申购费']}　"
+                f"**管理费** {row['管理费']}　"
+                f"**托管费** {row['托管费']}　"
+                f"**销售服务费** {row['销售服务费']}"
+            )
+            if pd.notna(row.get("起购金额")):
+                st.markdown(f"**起购金额** {row['起购金额']}")
+            if pd.notna(row.get("业绩比较基准")):
+                st.markdown(f"**业绩比较基准** {row['业绩比较基准']}")
 
 with st.expander("📋 完整列表", expanded=False):
     detail_cols = [
@@ -176,6 +236,8 @@ with st.expander("📋 完整列表", expanded=False):
         "成立日期",
         "跟踪标的",
         "跟踪方式",
+        "起购金额",
+        "业绩比较基准",
     ]
     detail_df = display[[c for c in detail_cols if c in display.columns]].copy()
     st.dataframe(detail_df, hide_index=True, use_container_width=True)
