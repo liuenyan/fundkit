@@ -16,6 +16,8 @@
 - 一次性投入对比：等额资金一次性买入 vs 定投
 - 止盈策略 A：目标止盈（达阈值卖出，可选循环）
 - 止盈策略 B：停投持有 + 移动止盈（达标停投，回撤卖出，可选循环）
+- 均线策略：指数均线偏离度自动调节买入倍数（内置 default/aggressive/conservative 三档）
+- 价值平均：每期固定增长市值，自动兜底最小金额
 - 图表输出：双面板 PNG（净值 + 成本 / 收益率 + 回撤）
 - CSV 导出
 
@@ -64,14 +66,20 @@ fundkit/
 ├── backend/                 # 业务逻辑层
 │   ├── __init__.py
 │   ├── dca_backtest.py      # 定投回测 CLI 主程序（cache-first，BacktestError 异常）
-│   ├── em_fetcher.py        # 东方财富 pingzhongdata JS 直取（一次 HTTP + JS eval）
-│   ├── strategy.py          # 买入/卖出策略对象（固定金额、价值平均、目标止盈、移动止盈）
 │   ├── charting.py          # matplotlib 双面板图表绘制
+│   ├── cjk_font.py          # 中文字体检测与设置
+│   ├── em_fetcher.py        # 东方财富 pingzhongdata JS 直取
+│   ├── formatters.py        # 格式化函数（百分率/净值/规模/综合费率）
+│   ├── fund_data.py         # 基金数据共享层（费率解析、规模兜底等）
 │   ├── fund_query.py        # 基金查询逻辑
+│   ├── index_fetcher.py     # 指数价格查询路由（csindex/sina_hk/sina_us）
 │   ├── index_fund.py        # 指数选基数据获取 + 搜索/筛选/排序
-│   ├── pension_fund.py      # 养老金选基后端
 │   ├── index_valuation.py   # 指数估值百分位计算后端
-│   └── fund_data.py         # 基金数据共享层（费率解析、规模兜底等）
+│   ├── logger.py            # 统一日志配置（stderr + RotatingFileHandler）
+│   ├── parse_utils.py       # 字符串解析工具
+│   ├── pension_fund.py      # 养老金选基后端
+│   ├── stats.py             # 财务统计函数（最大回撤/年化/百分位/波动率等）
+│   └── strategy.py          # 买入/卖出策略对象（固定金额/价值平均/均线/目标止盈/移动止盈）
 │
 ├── app_pages/               # Streamlit 页面（与 app.py 一一对应）
 │   ├── dca.py               # 定投回测
@@ -80,10 +88,24 @@ fundkit/
 │   ├── pension_fund.py      # 养老金选基
 │   └── index_valuation.py   # 指数估值
 │
-├── tools/                   # 通用工具模块
-│   ├── cjk_font.py          # 中文字体检测与设置（setup_cjk_font）
-│   ├── stats.py             # 统计函数（max_drawdown / calc_annualized / calc_percentile）
-│   └── formatters.py        # 格式化工具
+├── tools/                   # CLI 工具
+│   ├── build_index_name_map.py  # 指数名称→代码映射构造
+│   ├── cnindex_export.py        # CNINDEX 数据导出
+│   ├── compare_strategies.py    # 多策略对比报告
+│   ├── csi_export.py            # 中证指数数据导出
+│   ├── find_scenarios.py        # 场景化定投回测
+│   └── gen_name_map_report.py   # 指数映射报告生成
+│
+├── tests/                   # 测试套件（pytest）
+│   ├── conftest.py              # 共享 fixture（in-memory SQLite）
+│   ├── test_db.py
+│   ├── test_dca_integration.py
+│   ├── test_formatters.py
+│   ├── test_fund_classify.py
+│   ├── test_nav_history_cache.py
+│   ├── test_parse_utils.py
+│   ├── test_stats.py
+│   └── test_strategy.py
 │
 ├── collect_fund_data.py     # 数据预采集（费率/规模/档案/净值/名录/跟踪方式）
 ├── db.py                    # SQLAlchemy Core 数据库层（SQLite WAL，10 张表）
@@ -92,13 +114,20 @@ fundkit/
 ├── charts/                  # 图表输出目录（自动创建）
 │
 ├── docs/
-│   ├── dca_backtest_cli.md  # 命令行定投回测完整手册
-│   ├── collect_fund_data.md # 数据采集工具文档
-│   ├── data_source.md       # 数据源调研与选型说明
-│   └── database.md          # 数据库表设计文档
+│   ├── dca_backtest_cli.md      # 命令行定投回测完整手册
+│   ├── collect_fund_data.md     # 数据采集工具文档
+│   ├── data_source.md           # 数据源调研与选型说明
+│   ├── database.md              # 数据库表设计文档
+│   ├── optimization_directions.md  # 综合优化方向
+│   └── ...                      # 更多分析/设计文档
 │
-├── pyproject.toml           # 项目配置与依赖声明
-└── uv.lock                  # 依赖锁定文件
+├── .pre-commit-config.yaml # pre-commit 钩子（ruff + pyright）
+├── AGENTS.md               # opencode 辅助配置
+├── LICENSE                 # MIT
+├── opencode.json           # opencode 配置
+├── pyproject.toml          # 项目配置与依赖声明
+├── pyrightconfig.json      # pyright 类型检查配置
+└── uv.lock                 # 依赖锁定文件
 ```
 
 ### 数据流
@@ -107,19 +136,21 @@ fundkit/
 collect_fund_data.py ──预采集──→ SQLite (data/fundkit.db)
                                     │
 Streamlit 页面 ──本地 JOIN 查询──→   │
-                                    │
-                                    ├─ fund_catalog    (27,037 只)
-                                    ├─ fund_fee        (26,770 只)
-                                    ├─ fund_scale      (26,505 只)
-                                    ├─ fund_profile    (26,770 只)
-                                    ├─ fund_nav        (25,333 只)  ← 日频快照
-                                    ├─ fund_nav_history(3,273 条/基) ← 全量历史缓存(回测用)
-                                    ├─ index_series    (73,742 条)
-                                    ├─ cache_meta      (17 条)
-                                    └─ funds_meta      (3 条 TTL 标记)
+  CLI 工具                           │
+                                    ├─ fund_catalog     (全部基金名录)
+                                    ├─ fund_fee         (申购/管理/托管/销售费率)
+                                    ├─ fund_scale       (净资产/份额规模)
+                                    ├─ fund_profile     (基金经理/跟踪标的/方式)
+                                    ├─ fund_nav         (日频净值快照)
+                                    ├─ fund_nav_history (全量历史净值，回测用)
+                                    ├─ fund_dividend    (分红记录)
+                                    ├─ index_series     (指数估值/价格时序)
+                                    ├─ index_name_map   (指数名称→代码映射)
+                                    ├─ cache_meta       (指数缓存元信息)
+                                    └─ funds_meta       (缓存 TTL 标记)
 ```
 
-**关键设计**：所有 Streamlit 页面通过 `db.py` 的本地 JOIN 查询读取缓存，**零 AKShare API 调用**。预采集脚本 `collect_fund_data.py` 独立管理各数据的 TTL（费率 90 天 / 净值 24 小时 / 名录 90 天）。定投回测 `fetch_fund_data()` 优先读取 `fund_nav_history` 本地缓存。
+**关键设计**：所有 Streamlit 页面通过 `db.py` 的本地 JOIN 查询读取缓存，**零 AKShare API 调用**。预采集脚本 `collect_fund_data.py` 独立管理各数据的 TTL（费率 90 天 / 净值 24 小时 / 名录 24 小时）。定投回测 `fetch_fund_data()` 优先读取 `fund_nav_history` 本地缓存。
 
 ## 核心技术
 
@@ -133,22 +164,53 @@ Streamlit 页面 ──本地 JOIN 查询──→   │
 | SQLAlchemy Core | 数据库管理（SQLite + WAL 模式） |
 | py_mini_racer | JS 引擎（解析东方财富 pingzhongdata 文件） |
 
-## 快速开始
+## 安装
 
 ```bash
-# 安装依赖（自动创建 .venv）
 uv sync --extra dev
+```
 
-# 预采集数据（首次使用）
-uv run python collect_fund_data.py --catalog     # 基金名录
-uv run python collect_fund_data.py               # 费率+规模+档案+跟踪方式
-uv run python collect_fund_data.py --nav         # 净值
+## 数据采集
 
-# 启动图形界面
+```bash
+uv run collect --catalog     # 基金名录（24h TTL）
+uv run collect               # 费率+规模+档案+跟踪方式（90d TTL）
+uv run collect --nav         # 净值快照（24h TTL）
+uv run collect --dividend    # 分红记录（90d TTL）
+```
+
+## CLI 工具
+
+```bash
+# 定投回测
+uv run backtest --fund 161725 --amount 1000 --start 2018-01-01
+
+# 均线策略（基于基金净值）
+uv run backtest --fund 161725 --amount 1000 --start 2018-01-01 --ma-period 250
+
+# 目标止盈（策略A）
+uv run backtest --fund 161725 --amount 1000 --start 2018-01-01 --take-profit 0.20
+
+# 移动止盈（策略B）
+uv run backtest --fund 161725 --amount 1000 --start 2018-01-01 --stop-invest 0.20 --trailing-stop 0.08
+
+# 价值平均
+uv run backtest --fund 161725 --value-avg 1000 --start 2018-01-01
+
+# 场景化分析（给定场景下的定投表现）
+uv run find-scenarios --fund 110026 --scenarios "熊市底部:2018-2019,市场平均:2020,牛市顶部:2021"
+
+# 多策略对比
+uv run compare-strategies --funds 110026,110020 --scenarios "..."
+
+# 构建指数名称→代码映射
+uv run build-name-map
+```
+
+## Streamlit 界面
+
+```bash
 uv run streamlit run app.py
-
-# 或使用命令行定投回测（详见 docs/dca_backtest_cli.md）
-uv run python -m backend.dca_backtest --fund 163415 --amount 1000 --start 2018-01-01
 ```
 
 ## 注意事项
