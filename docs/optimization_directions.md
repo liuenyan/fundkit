@@ -114,9 +114,7 @@
 
 ### 文档一致性
 
-`README.md` 写 "Python 3.9+"，但 `pyproject.toml` 要求 `>=3.11`。
-
-**修复**：统一文档中的 Python 版本要求。
+- [x] `README.md` 写 "Python 3.9+"，但 `pyproject.toml` 要求 `>=3.11`。已统一为 3.11+。
 
 ### 参数扫描 / 优化器
 

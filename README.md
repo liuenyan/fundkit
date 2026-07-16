@@ -125,7 +125,7 @@ Streamlit 页面 ──本地 JOIN 查询──→   │
 
 | 技术 | 用途 |
 |------|------|
-| Python 3.9+ | 运行环境 |
+| Python 3.11+ | 运行环境 |
 | [AKShare](https://github.com/akfamily/akshare) | 金融数据接口（天天基金网、中证指数等） |
 | Streamlit | 图形界面框架 |
 | pandas / numpy | 数据处理与计算 |
