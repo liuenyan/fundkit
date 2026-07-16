@@ -9,15 +9,11 @@
 
 ### 静默吞异常
 
-`db.py` 及其他后端模块约 15 处使用了 `except Exception: return None` 模式。DB 操作（查询、写入）失败时不报错、不记录，用户在 Streamlit 界面上看到的是空数据，无法区分是"无数据"还是"查询出错"。
-
-**改进**：至少记录 warning 日志，对用户可见的错误应通过 Streamlit 的 `st.error` 或自定义异常向上传播。
+- [x] `db.py` 及其他后端模块约 15 处使用了 `except Exception: return None` 模式。已逐处添加 `logger.warning/error`，DB 操作失败时会输出日志到 stderr 和文件，用户可通过 Streamlit 的 `st.error` 或自定义异常向上传播。
 
 ### 无结构化日志
 
-仅 `backend/index_fetcher.py` 一处使用 Python `logging`，其余模块（`db.py`、`collect_fund_data.py`、`backend/fund_data.py` 等）要么 `print()` 到 stdout，要么静默吞异常。生产环境问题排查困难。
-
-**改进**：引入统一的 `logging` 配置，关键流程（采集、缓存命中/过期、查询失败）输出结构化日志。
+- [x] 仅 `backend/index_fetcher.py` 一处使用 Python `logging`。已创建 `backend/logger.py` 统一日志配置，所有模块使用 `get_logger(__name__)`，同时输出到 stderr 和 `data/fundkit.log`（5MB × 3 轮转），入口点（CLI main / Streamlit app）调用 `setup_logging()`。
 
 ### 数据库备份手动
 
@@ -47,39 +43,40 @@
 
 ## P2 — 测试与质量保证
 
-### 测试覆盖率 41%
+### 测试覆盖率 57%
 
 按模块拆分：
 
 | 模块 | 覆盖率 | 说明 |
 |------|--------|------|
-| `backend/strategy.py` | 98% | [x] 策略对象已充分测试 |
+| `backend/strategy.py` | 100% | [x] 策略对象已充分测试 |
 | `backend/parse_utils.py` | 95% | [x] Parse 工具函数已充分测试 |
+| `backend/formatters.py` | 100% | [x] 格式化函数已充分测试 |
+| `backend/stats.py` | 100% | [x] 财务统计函数已充分测试 |
+| `db.py` | 88% | [x] 表 Save/Load/Clear/缓存/Join 查询已覆盖 |
 | `backend/index_fund.py` | 62% | 搜索/筛选逻辑未测试 |
 | `backend/pension_fund.py` | 67% | 分类逻辑未测试 |
 | `backend/dca_backtest.py` | 46% | CLI main、绘图、数据获取未测试 |
-| `db.py` | 42% | 大部分 save/load/clear 方法未测试 |
 | `backend/index_valuation.py` | 17% | 几乎未测试 |
-| `backend/stats.py` | 16% | 全部财务统计函数未测试 |
 | `backend/index_fetcher.py` | 24% | API 路由未测试 |
 | `backend/fund_data.py` | 10% | 几乎未测试 |
 | `backend/em_fetcher.py` | 22% | JS eval 拉取器未测试 |
-| `backend/formatters.py` | 0% | 完全未测试 |
 | `collect_fund_data.py` | 0% | 完全未测试 |
 | `app_pages/*` | 0% | 全部 UI 页面未测试 |
 | `tools/*` | 0-13% | 全部工具未测试 |
 
-**已覆盖的测试**（120 条）：
-- `TargetProfitSellStrategy` — 触发/不触发/循环 3 条
-- `TrailingStopSellStrategy` 回撤触发路径 — 停投→回撤卖出 1 条
-- `ValueAveragingBuyStrategy` 最大倍数限制 / 最小金额兜底 — 2 条
-- `MovingAverageBuyStrategy` 自定义 tier 路径 — 2 条
+**已覆盖的测试**（275 条）：
+- `stats.py` 9 个纯函数 — 48 条（最大回撤/年化收益/百分位/波动率/Sharpe/Calmar/胜率/盈亏比/回撤持续期）
+- `formatters.py` 4 个格式化函数 — 34 条（百分率/净值/规模/综合费率）
+- `strategy.py` 全部策略类 — 39 条（固定金额/价值平均/均线/目标止盈/移动止盈 + DCAPosition/BuyAction）
+- `db.py` 表访问层、Join 查询、缓存、清理函数 — 50 条
 - `calc_redeem_fee()` / `calc_lumpsum()` / `generate_dca_dates()` 等 — 19 条
+- `parse_utils.py` 工具函数 — 19 条
 
 **改进**：
-- 优先覆盖 IO/DB 模块的基础操作测试
+- [x] 覆盖 IO/DB 模块的基础操作测试（formatters.py / stats.py / db.py / strategy.py）
 - 为 UI 页面加集成测试
-- 覆盖 `tools/compare_strategies.py`、`find_scenarios.py`、`formatters.py`、`stats.py`
+- 覆盖 `tools/compare_strategies.py`、`find_scenarios.py`
 
 ### CI 未强制覆盖率门槛
 
