@@ -11,7 +11,10 @@ import pandas as pd
 import akshare as ak
 
 import db
+from backend.logger import get_logger
 from backend.parse_utils import parse_pct, parse_scale
+
+logger = get_logger(__name__)
 
 SORT_OPTIONS = {
     "默认": None,
@@ -51,6 +54,7 @@ def fetch_one_overview(code: str) -> tuple[Any, ...] | None:
             str(row.get("跟踪标的")) or None,
         )
     except Exception:
+        logger.warning("获取基金 %s 档案失败", code)
         return None
 
 
@@ -77,6 +81,7 @@ def fetch_purchase_data(codes: list[str] | None = None) -> dict[str, tuple[float
     try:
         df = ak.fund_purchase_em()
     except Exception:
+        logger.warning("获取 fund_purchase_em 失败")
         return {}
     if codes:
         df = df[df["基金代码"].isin(codes)]

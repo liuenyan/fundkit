@@ -8,6 +8,10 @@ import matplotlib
 matplotlib.use("Agg")
 import streamlit as st
 
+from backend.logger import setup_logging
+
+setup_logging()
+
 dca = st.Page("app_pages/dca.py", title="定投回测", icon="📊", url_path="dca")
 val = st.Page("app_pages/index_valuation.py", title="指数估值", icon="📈", url_path="valuation")
 idx = st.Page("app_pages/index_fund.py", title="指数选基", icon="🎯", url_path="index_fund")

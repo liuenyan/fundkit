@@ -14,16 +14,12 @@ import pandas as pd
 import akshare as ak
 
 import db
+from backend.logger import get_logger, setup_logging
 from db import engine as db_engine
 from tools.csi_export import get_equity_name_map as get_csi_name_map
 from tools.cnindex_export import get_equity_name_map as get_cnindex_name_map
 
-logging.basicConfig(
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _TODAY = datetime.now().strftime("%Y%m%d")
 
@@ -474,6 +470,7 @@ def print_report(success: list[dict], failed: list[dict], skipped: list[dict]) -
 
 
 def main() -> None:
+    setup_logging(level=logging.INFO)
     parser = argparse.ArgumentParser(description="构建指数名称→代码映射表")
     parser.add_argument("--dry-run", action="store_true", help="仅预览，不写入")
     parser.add_argument("--no-verify", action="store_true", help="跳过 API 验证")

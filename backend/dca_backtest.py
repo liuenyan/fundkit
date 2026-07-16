@@ -18,6 +18,7 @@ import pandas as pd
 
 from backend.charting import create_chart
 from backend.em_fetcher import fetch_nav_data
+from backend.logger import get_logger, setup_logging
 from backend.index_fetcher import fetch_index_price, lookup_index
 from backend.stats import (
     annualized_volatility,
@@ -42,6 +43,9 @@ from backend.strategy import (
 
 import akshare as ak
 import db
+
+
+logger = get_logger(__name__)
 
 
 class BacktestError(Exception):
@@ -190,6 +194,7 @@ def fetch_dividend_data(fund_code: str) -> pd.DataFrame:
     try:
         df = ak.fund_open_fund_info_em(symbol=fund_code, indicator="分红送配详情", period="成立来")
     except Exception:
+        logger.warning("获取分红数据失败: %s", fund_code)
         return pd.DataFrame()
     if df is None or df.empty or "暂无" in str(df.iloc[0, 0]):
         return pd.DataFrame()
@@ -728,6 +733,7 @@ def print_detail_table(detail: pd.DataFrame, final_val: float, total_ret: float,
 
 
 def main() -> None:
+    setup_logging()
     args = parse_args()
     end_date = args.end or datetime.today().strftime("%Y-%m-%d")
 
@@ -798,6 +804,7 @@ def main() -> None:
                     else:
                         ma_nav = nav_df
                 except Exception:
+                    logger.warning("MA warmup 加载失败，回退基金净值: %s", args.fund)
                     ma_nav = nav_df
             ma_tiers, ma_mults = MovingAverageBuyStrategy.MA_MODES.get(
                 args.ma_mode, MovingAverageBuyStrategy.MA_MODES["default"]

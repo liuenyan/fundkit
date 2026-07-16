@@ -3,7 +3,6 @@
 数据源: 中证指数 (中证公司发布) 优先，乐咕乐股 (其他指数) 备用
 """
 
-import logging
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -13,14 +12,10 @@ import pandas as pd
 import akshare as ak
 
 import db
+from backend.logger import get_logger
 from backend.stats import calc_percentile
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.WARNING,
-)
+logger = get_logger(__name__)
 
 _TODAY = datetime.now().strftime("%Y%m%d")
 
@@ -129,6 +124,7 @@ def get_or_update_series(
     try:
         df_raw = fetch_fn()
     except Exception:
+        logger.warning("获取 %s %s 估值数据失败", index_code, metric, exc_info=True)
         df_raw = None
     if df_raw is None or df_raw.empty:
         db.set_cache_meta(index_code, metric, source + ":failed")

@@ -18,6 +18,7 @@ import pandas as pd
 
 import db
 from backend.em_fetcher import fetch_nav_data
+from backend.logger import setup_logging
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,6 +104,7 @@ def find_scenarios(fund_code: str, specs: list[tuple[str, str]]) -> list[tuple[s
 
 
 def main() -> None:
+    setup_logging()
     args = parse_args()
 
     # 解析场景规格

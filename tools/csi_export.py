@@ -14,7 +14,9 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 _CSI_URL = "https://www.csindex.com.cn/csindex-home/exportExcel/indexAll/CH"
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -112,7 +114,9 @@ def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, tuple[str, 
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from backend.logger import setup_logging
+
+    setup_logging(level=logging.INFO)
     df = fetch_csi_index_list(force=True)
     print(f"总条数: {len(df)}")
     print(f"资产类别分布:\n{df['资产类别'].value_counts().to_string()}")

@@ -5,6 +5,10 @@ CJK font setup for matplotlib — extracted for reuse.
 import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def setup_cjk_font() -> None:
     s = ""
@@ -40,6 +44,7 @@ def setup_cjk_font() -> None:
                 s += f"{_name}, "
                 break
             except Exception:
+                logger.debug("字体 %s 不可用，尝试下一个", _name)
                 continue
     if s:
         plt.rcParams["font.family"] = s.rstrip(", ")

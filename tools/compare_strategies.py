@@ -20,6 +20,7 @@ from datetime import datetime
 import pandas as pd
 
 import db
+from backend.logger import setup_logging
 from backend.dca_backtest import (
     BacktestError,
     fetch_dividend_data,
@@ -229,6 +230,7 @@ def build_markdown_table(records: list[dict], fund_names: dict[str, str]) -> str
 
 
 def main() -> None:
+    setup_logging()
     args = parse_args()
     end_date = args.end or datetime.today().strftime("%Y-%m-%d")
     fund_codes = [c.strip() for c in args.funds.split(",")]

@@ -24,11 +24,12 @@ import time
 import akshare as ak
 import pandas as pd
 
-from backend.parse_utils import parse_pct_series, to_float_series
-
-
 import db
 from backend.fund_data import batch_fetch_overview, fetch_purchase_data, save_overview_result
+from backend.logger import get_logger, setup_logging
+from backend.parse_utils import parse_pct_series, to_float_series
+
+logger = get_logger(__name__)
 
 
 def collect_fund_data(max_workers: int = 10, force: bool = False, codes: list[str] | None = None) -> None:
@@ -109,7 +110,7 @@ def collect_tracking_method() -> None:
         passive = ak.fund_info_index_em(symbol="全部", indicator="被动指数型")
         enhanced = ak.fund_info_index_em(symbol="全部", indicator="增强指数型")
     except Exception as e:
-        print(f"  fund_info_index_em 调用失败: {e}")
+        logger.warning("fund_info_index_em 调用失败: %s", e)
         return
 
     method_map = {}
@@ -213,7 +214,7 @@ def collect_fund_nav(force: bool = False) -> None:
     try:
         open_df = ak.fund_open_fund_daily_em()
     except Exception as e:
-        print(f"  fund_open_fund_daily_em 调用失败: {e}")
+        logger.warning("fund_open_fund_daily_em 调用失败: %s", e)
         open_df = pd.DataFrame()
 
     if not open_df.empty:
@@ -240,7 +241,7 @@ def collect_fund_nav(force: bool = False) -> None:
     try:
         etf_df = ak.fund_etf_fund_daily_em()
     except Exception as e:
-        print(f"  fund_etf_fund_daily_em 调用失败: {e}")
+        logger.warning("fund_etf_fund_daily_em 调用失败: %s", e)
         etf_df = pd.DataFrame()
 
     if not etf_df.empty:
@@ -267,7 +268,7 @@ def collect_fund_nav(force: bool = False) -> None:
     try:
         fof_df = ak.fund_open_fund_rank_em(symbol="FOF")
     except Exception as e:
-        print(f"  fund_open_fund_rank_em 调用失败: {e}")
+        logger.warning("fund_open_fund_rank_em 调用失败: %s", e)
         fof_df = pd.DataFrame()
 
     if not fof_df.empty:
@@ -307,7 +308,7 @@ def collect_fund_catalog(force: bool = False) -> None:
     try:
         df = ak.fund_name_em()
     except Exception as e:
-        print(f"  fund_name_em 调用失败: {e}")
+        logger.warning("fund_name_em 调用失败: %s", e)
         return
     db.fund_catalog.save(df)
     cnt = df["基金代码"].nunique()
@@ -315,6 +316,7 @@ def collect_fund_catalog(force: bool = False) -> None:
 
 
 def main() -> None:
+    setup_logging()
     parser = argparse.ArgumentParser(description="预采集基金费率数据")
     parser.add_argument("--force", action="store_true", help="强制全量重采")
     parser.add_argument("--codes", help="指定基金代码（逗号分隔）")

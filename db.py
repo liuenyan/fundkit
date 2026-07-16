@@ -21,6 +21,10 @@ from sqlalchemy import (
     text,
 )
 
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
+
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH = os.path.join(DATA_DIR, "fundkit.db")
 DB_URL = f"sqlite:///{DB_PATH}"
@@ -196,7 +200,7 @@ class _FundTable:
             if ts is not None:
                 return time.time() - ts < ttl
         except Exception:
-            pass
+            logger.warning("缓存未就绪: %s", self.meta_key or self.table.name)
         return False
 
     def set_fresh(self) -> None:
@@ -276,6 +280,7 @@ class FundFeeTable(_DictTable):
                 row = conn.execute(text("SELECT COUNT(*) FROM fund_fee")).fetchone()
                 return row[0] if row else 0
         except Exception:
+            logger.warning("查 fund_fee 数量失败")
             return 0
 
 
@@ -360,6 +365,7 @@ class _BulkTable(_FundTable):
         try:
             return pd.read_sql(text(f"SELECT * FROM {self.table.name}"), engine)
         except Exception:
+            logger.error("批量加载 %s 失败", self.table.name, exc_info=True)
             return None
 
     def save(self, df: pd.DataFrame) -> None:
@@ -426,6 +432,7 @@ class FundNavHistoryTable:
                 expected = _last_available_data_day(end_date, now=_now)
                 return row[0] >= expected
         except Exception:
+            logger.warning("净值缓存过期检查失败: %s", fund_code)
             return False
 
     def load(self, fund_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
@@ -442,6 +449,7 @@ class FundNavHistoryTable:
             df = df.rename(columns={"日期": "净值日期"})
             return df
         except Exception:
+            logger.error("加载净值失败: %s", fund_code, exc_info=True)
             return None
 
     def save(self, fund_code: str, df: pd.DataFrame) -> None:
@@ -487,7 +495,7 @@ class FundDividendTable:
                     if not df.empty:
                         return df
         except Exception:
-            pass
+            logger.warning("分红数据读取失败: %s", fund_code)
         return None
 
     def save(self, fund_code: str, df: pd.DataFrame) -> None:
@@ -637,6 +645,7 @@ def load_index_fund_nav() -> pd.DataFrame | None:
                 conn,
             )
     except Exception:
+        logger.error("指数基金净值查询失败", exc_info=True)
         return None
 
 
@@ -671,6 +680,7 @@ def load_pension_funds() -> pd.DataFrame | None:
                 conn,
             )
     except Exception:
+        logger.error("养老基金查询失败", exc_info=True)
         return None
 
 
