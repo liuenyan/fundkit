@@ -1,6 +1,6 @@
 # 代码质量评估报告
 
-> 生成日期：2026-07-17
+> 生成日期：2026-07-18
 
 ## 总体评估：良好
 
@@ -12,14 +12,15 @@
 
 | 指标 | 数值 |
 |------|------|
-| Python 源文件数（非 test） | 25 |
-| 总代码行数 | 8,297（有效代码 6,738） |
-| 测试代码行数 | 1,524 |
-| 测试数 | 275 |
+| Python 源文件数（含 test） | 41 |
+| Python 源文件数（非 test） | 32 |
+| 总代码行数 | 8,383（有效代码 6,276） |
+| 测试代码行数 | 2,107 |
+| 测试数 | 292 |
 | 测试通过率 | 100% |
 | Ruff 警告数 | 0 |
 | Pyright 错误数 | 0 |
-| 总体测试覆盖率 | 57% |
+| 总体测试覆盖率 | 87% |
 | 函数含返回类型注解 | ~95% |
 
 ## 架构分层
@@ -64,22 +65,23 @@ app_pages/                      # Streamlit 页面
 tests/                          # 测试套件（9 文件）
   ├─ conftest.py                # in-memory SQLite fixture
   ├─ test_db.py                 # DB 表操作（50 用例）
-  ├─ test_dca_integration.py    # 定投集成（24 用例）
+  ├─ test_dca_integration.py    # 定投集成（30 用例）
   ├─ test_formatters.py         # 格式化函数（34 用例）
   ├─ test_fund_classify.py      # 基金分类（21 用例）
   ├─ test_nav_history_cache.py  # 缓存策略（9 用例）
-  ├─ test_parse_utils.py        # 解析工具（19 用例）
+  ├─ test_parse_utils.py        # 解析工具（36 用例）
   ├─ test_stats.py              # 统计函数（48 用例）
   └─ test_strategy.py           # 策略类（39 用例）
 ```
 
 ## 优势
 
-1. **测试覆盖大幅提升** — 从 30 用例 41% 覆盖到 275 用例 57% 覆盖，核心统计/格式化/策略/DB 模块达 88-100%
+1. **测试覆盖大幅提升** — 从 30 用例 41% 覆盖到 292 用例 87% 覆盖，核心统计/格式化/策略/DB/解析模块达 88-100%
 2. **Ruff + Pyright 零警告** — pre-commit 钩子强制执行
 3. **统一日志** — `backend/logger.py` 消除散落的 `print()` 和静默吞异常
 4. **数据层统一** — `db.py` OOP 化后表 API 一致，in-memory SQLite 可测试
 5. **无循环依赖** — 模块依赖图无环
+6. **模块职责清晰** — `dca_backtest.py` 拆分为 CLI + 引擎两层，各模块单一职责
 
 ## 可改进
 

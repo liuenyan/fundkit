@@ -1,5 +1,5 @@
 [![CI](https://github.com/liuenyan/fundkit/actions/workflows/ci.yml/badge.svg)](https://github.com/liuenyan/fundkit/actions/workflows/ci.yml)
-![coverage](https://img.shields.io/badge/coverage-57%25-yellow)
+![coverage](https://img.shields.io/badge/coverage-87%25-green)
 
 # FundKit — 中国公募基金工具箱
 
