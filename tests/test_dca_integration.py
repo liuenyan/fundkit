@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from backend.dca_backtest import (
+from backend.dca_engine import (
     build_dividend_dict,
     calc_lumpsum,
     calc_redeem_fee,
@@ -513,9 +513,9 @@ class TestBuildDividendDict:
 class TestFetchDividendData:
     """fetch_dividend_data 缓存/API 路径测试"""
 
-    @patch("backend.dca_backtest.db.fund_dividend.save")
-    @patch("backend.dca_backtest.db.fund_dividend.load")
-    @patch("backend.dca_backtest.db.init_db")
+    @patch("backend.dca_engine.db.fund_dividend.save")
+    @patch("backend.dca_engine.db.fund_dividend.load")
+    @patch("backend.dca_engine.db.init_db")
     def test_cache_hit(self, mock_init: MagicMock, mock_load: MagicMock, mock_save: MagicMock) -> None:
         """缓存命中 → 直接返回缓存数据，日期转为 Timestamp"""
         mock_load.return_value = pd.DataFrame(
@@ -530,10 +530,10 @@ class TestFetchDividendData:
         assert result["每份分红"].tolist() == [0.1, 0.05]
         mock_save.assert_not_called()
 
-    @patch("backend.dca_backtest.db.fund_dividend.save")
-    @patch("backend.dca_backtest.db.fund_dividend.load")
-    @patch("backend.dca_backtest.ak.fund_open_fund_info_em")
-    @patch("backend.dca_backtest.db.init_db")
+    @patch("backend.dca_engine.db.fund_dividend.save")
+    @patch("backend.dca_engine.db.fund_dividend.load")
+    @patch("backend.dca_engine.ak.fund_open_fund_info_em")
+    @patch("backend.dca_engine.db.init_db")
     def test_cache_miss_api_success(
         self, mock_init: MagicMock, mock_api: MagicMock, mock_load: MagicMock, mock_save: MagicMock
     ) -> None:
@@ -554,9 +554,9 @@ class TestFetchDividendData:
         saved = mock_save.call_args[0][1]
         assert list(saved.columns) == ["除息日", "每份分红"]
 
-    @patch("backend.dca_backtest.db.fund_dividend.load")
-    @patch("backend.dca_backtest.ak.fund_open_fund_info_em")
-    @patch("backend.dca_backtest.db.init_db")
+    @patch("backend.dca_engine.db.fund_dividend.load")
+    @patch("backend.dca_engine.ak.fund_open_fund_info_em")
+    @patch("backend.dca_engine.db.init_db")
     def test_cache_miss_api_empty(self, mock_init: MagicMock, mock_api: MagicMock, mock_load: MagicMock) -> None:
         """缓存未命中，API 返回空 DataFrame → 返回空"""
         mock_load.return_value = None
@@ -564,9 +564,9 @@ class TestFetchDividendData:
         result = fetch_dividend_data("000000")
         assert result.empty
 
-    @patch("backend.dca_backtest.db.fund_dividend.load")
-    @patch("backend.dca_backtest.ak.fund_open_fund_info_em")
-    @patch("backend.dca_backtest.db.init_db")
+    @patch("backend.dca_engine.db.fund_dividend.load")
+    @patch("backend.dca_engine.ak.fund_open_fund_info_em")
+    @patch("backend.dca_engine.db.init_db")
     def test_cache_miss_api_no_data_text(self, mock_init: MagicMock, mock_api: MagicMock, mock_load: MagicMock) -> None:
         """缓存未命中，API 返回含"暂无"的 DataFrame → 返回空"""
         mock_load.return_value = None
@@ -574,9 +574,9 @@ class TestFetchDividendData:
         result = fetch_dividend_data("000000")
         assert result.empty
 
-    @patch("backend.dca_backtest.db.fund_dividend.load")
-    @patch("backend.dca_backtest.ak.fund_open_fund_info_em")
-    @patch("backend.dca_backtest.db.init_db")
+    @patch("backend.dca_engine.db.fund_dividend.load")
+    @patch("backend.dca_engine.ak.fund_open_fund_info_em")
+    @patch("backend.dca_engine.db.init_db")
     def test_cache_miss_api_exception(self, mock_init: MagicMock, mock_api: MagicMock, mock_load: MagicMock) -> None:
         """缓存未命中，API 抛出异常 → 返回空"""
         mock_load.return_value = None

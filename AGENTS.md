@@ -22,15 +22,18 @@ Skills (按需加载，`.opencode/skills/*/`):
 ## Architecture
 
 ```
-main()                          # backend/dca_backtest.py
-├─ fetch_fund_data()            # fund_nav_history cache → AKShare fallback
-├─ generate_dca_dates()         # calendar → nearest trading day
-├─ simulate_dca()               # core loop with strategy objects
-│  ├─ FixedBuyStrategy          #   定期定额 (backend/strategy.py)
-│  ├─ ValueAveragingBuyStrategy #   价值平均
-│  ├─ TargetProfitSellStrategy  #   目标止盈 (策略A)
-│  └─ TrailingStopSellStrategy  #   移动止盈 (策略B)
-├─ calc_lumpsum()               # 一次性投入对照
+main()                          # backend/dca_backtest.py (CLI only)
+├─ parse_args()                 # argparse
+├─ fetch_fund_data()            #      backend/dca_engine.py
+├─ generate_dca_dates()         # ←    shared API
+├─ simulate_dca()               #      core loop with strategy objects
+│  ├─ FixedBuyStrategy          #        定期定额 (backend/strategy.py)
+│  ├─ ValueAveragingBuyStrategy #        价值平均
+│  ├─ TargetProfitSellStrategy  #        目标止盈 (策略A)
+│  └─ TrailingStopSellStrategy  #        移动止盈 (策略B)
+├─ calc_lumpsum()               #     一次性投入对照
+├─ print_summary()              # CLI output (dca_backtest.py)
+├─ print_detail_table()         # CLI output
 └─ plot_results()               # matplotlib 2-panel chart
 ```
 

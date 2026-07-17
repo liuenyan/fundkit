@@ -21,14 +21,14 @@ import pandas as pd
 
 import db
 from backend.logger import setup_logging
-from backend.dca_backtest import (
+from backend.dca_engine import (
     BacktestError,
+    calc_lumpsum,
     fetch_dividend_data,
     fetch_fund_data,
     generate_dca_dates,
     load_ma_buffer,
     simulate_dca,
-    calc_lumpsum,
 )
 from backend.index_fetcher import fetch_index_price, lookup_index
 from backend.strategy import (
