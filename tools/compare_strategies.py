@@ -26,6 +26,7 @@ from backend.dca_backtest import (
     fetch_dividend_data,
     fetch_fund_data,
     generate_dca_dates,
+    load_ma_buffer,
     simulate_dca,
     calc_lumpsum,
 )
@@ -76,22 +77,6 @@ def _parse_scenarios(raw: str) -> list[tuple[str, str]]:
     return result
 
 
-def load_ma_buffer(fund_code: str, start_date: str, buffer_days: int = 500) -> pd.DataFrame | None:
-    """从缓存读取 start_date 之前的数据用于均线计算"""
-    ma_start = (pd.Timestamp(start_date) - pd.Timedelta(days=buffer_days)).strftime("%Y-%m-%d")
-    try:
-        extra = db.fund_nav_history.load(fund_code, ma_start, start_date)
-        if extra is not None and not extra.empty:
-            extra["date"] = pd.to_datetime(extra["净值日期"])
-            extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
-            extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
-            extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
-            return extra
-    except Exception:
-        pass
-    return None
-
-
 def run_backtest(
     fund_code: str,
     start: str,
@@ -133,12 +118,7 @@ def run_backtest(
                 print(f"  ⚠ {fund_code} 跟踪标的 '{tracking_target}' 未映射，回退基金净值")
                 ma_nav = nav_df
         else:
-            extra = load_ma_buffer(fund_code, start)
-            if extra is not None:
-                ma_nav = pd.concat([extra, nav_df], ignore_index=True)
-                ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
-            else:
-                ma_nav = nav_df
+            ma_nav = load_ma_buffer(fund_code, start, ma_period, nav_df)
         buy = MovingAverageBuyStrategy(amount, ma_period, fee, ma_nav)
     else:
         raise ValueError(f"unknown strategy: {strategy}")

@@ -16,6 +16,7 @@ from backend.dca_backtest import (
     fetch_fund_data,
     fetch_fund_name,
     generate_dca_dates,
+    load_ma_buffer,
     simulate_dca,
     calc_lumpsum,
 )
@@ -230,20 +231,7 @@ with st.spinner("正在获取数据并计算…"):
                 st.info(f"跟踪标的 '{tracking_target}' 未映射，回退基金净值")
                 ma_nav = nav_df
         else:
-            ma_start = (start_date - pd.Timedelta(days=ma_period * 2)).strftime("%Y-%m-%d")
-            try:
-                extra = db.fund_nav_history.load(fund_code, ma_start, start_str)
-                if extra is not None and not extra.empty:
-                    extra["date"] = pd.to_datetime(extra["净值日期"])
-                    extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
-                    extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
-                    extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
-                    ma_nav = pd.concat([extra, nav_df], ignore_index=True)
-                    ma_nav = ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
-                else:
-                    ma_nav = nav_df
-            except Exception:
-                ma_nav = nav_df
+            ma_nav = load_ma_buffer(fund_code, start_str, ma_period, nav_df)
         if ma_tiers_str.strip():
             ma_tiers = tuple(float(x) for x in ma_tiers_str.split(","))
         else:
