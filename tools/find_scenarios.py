@@ -19,6 +19,7 @@ import pandas as pd
 import db
 from backend.em_fetcher import fetch_nav_data
 from backend.logger import setup_logging
+from backend.parse_utils import normalize_nav_df
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,15 +39,13 @@ def _load_full_nav(fund_code: str) -> pd.DataFrame:
     if db.fund_nav_history.is_cached(fund_code, "2099-12-31"):
         raw = db.fund_nav_history.load(fund_code, "2000-01-01", "2099-12-31")
         if raw is not None and not raw.empty:
-            raw["date"] = pd.to_datetime(raw["净值日期"])
-            raw["unit_nav"] = pd.to_numeric(raw["单位净值"], errors="coerce")
+            raw = normalize_nav_df(raw)
             return raw[["date", "unit_nav"]].dropna()
 
     # 缓存不足 → 从 API 获取并缓存
     df = fetch_nav_data(fund_code)
     db.fund_nav_history.save(fund_code, df)
-    df["date"] = pd.to_datetime(df["净值日期"])
-    df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
+    df = normalize_nav_df(df)
     return df[["date", "unit_nav"]].dropna()
 
 

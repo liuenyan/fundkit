@@ -19,6 +19,7 @@ import pandas as pd
 from backend.charting import create_chart
 from backend.em_fetcher import fetch_nav_data
 from backend.logger import get_logger, setup_logging
+from backend.parse_utils import normalize_nav_df
 from backend.index_fetcher import fetch_index_price, lookup_index
 from backend.stats import (
     annualized_volatility,
@@ -150,11 +151,7 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
         if cached is not None and not cached.empty:
             print(f"从本地缓存读取 {len(cached)} 条净值记录")
             df = cached
-            df["date"] = pd.to_datetime(df["净值日期"])
-            df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
-            df["acc_nav"] = pd.to_numeric(df["累计净值"], errors="coerce")
-            df["daily_return"] = pd.to_numeric(df["日增长率"], errors="coerce")
-            return df
+            return normalize_nav_df(df)
 
     # 缓存不足 → 从天天基金网获取全量历史
     print(f"获取基金 {fund_code} 历史净值数据 ...")
@@ -169,10 +166,7 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
     # 保存全量数据到缓存
     db.fund_nav_history.save(fund_code, df)
 
-    df["date"] = pd.to_datetime(df["净值日期"])
-    df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
-    df["acc_nav"] = pd.to_numeric(df["累计净值"], errors="coerce")
-    df["daily_return"] = pd.to_numeric(df["日增长率"], errors="coerce")
+    df = normalize_nav_df(df)
 
     mask = (df["date"] >= pd.Timestamp(start_date)) & (df["date"] <= pd.Timestamp(end_date))
     df = df[mask].reset_index(drop=True)
@@ -527,10 +521,7 @@ def load_ma_buffer(
     try:
         extra = db.fund_nav_history.load(fund_code, ma_start, start_date)
         if extra is not None and not extra.empty:
-            extra["date"] = pd.to_datetime(extra["净值日期"])
-            extra["unit_nav"] = pd.to_numeric(extra["单位净值"], errors="coerce")
-            extra["acc_nav"] = pd.to_numeric(extra["累计净值"], errors="coerce")
-            extra["daily_return"] = pd.to_numeric(extra["日增长率"], errors="coerce")
+            extra = normalize_nav_df(extra)
             ma_nav = pd.concat([extra, nav_df], ignore_index=True)
             return ma_nav.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
     except Exception:

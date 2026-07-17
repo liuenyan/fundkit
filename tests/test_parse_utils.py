@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from backend.parse_utils import normalize, parse_pct, parse_pct_series, parse_scale, to_float_series
+from backend.parse_utils import normalize, normalize_nav_df, parse_pct, parse_pct_series, parse_scale, to_float_series
 
 
 class TestParsePct:
@@ -168,3 +168,47 @@ class TestNormalize:
 
     def test_empty_string(self) -> None:
         assert normalize("") == ""
+
+
+class TestNormalizeNavDf:
+    def test_basic_normalization(self) -> None:
+        df = pd.DataFrame(
+            {
+                "净值日期": ["2024-01-02", "2024-01-03"],
+                "单位净值": ["1.5", "1.6"],
+                "累计净值": ["2.0", "2.1"],
+                "日增长率": ["0.5", "-0.3"],
+            }
+        )
+        result = normalize_nav_df(df)
+        assert result["date"].tolist() == [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]
+        assert result["unit_nav"].tolist() == [1.5, 1.6]
+        assert result["acc_nav"].tolist() == [2.0, 2.1]
+        assert result["daily_return"].tolist() == [0.5, -0.3]
+
+    def test_coerce_non_numeric(self) -> None:
+        df = pd.DataFrame(
+            {
+                "净值日期": ["2024-01-02"],
+                "单位净值": ["---"],
+                "累计净值": [None],
+                "日增长率": ["0.5"],
+            }
+        )
+        result = normalize_nav_df(df)
+        assert pd.isna(result["unit_nav"].iloc[0])
+        assert pd.isna(result["acc_nav"].iloc[0])
+        assert result["daily_return"].iloc[0] == 0.5
+
+    def test_original_columns_preserved(self) -> None:
+        df = pd.DataFrame(
+            {
+                "净值日期": ["2024-01-02"],
+                "单位净值": ["1.5"],
+                "累计净值": ["2.0"],
+                "日增长率": ["0.5%"],
+            }
+        )
+        result = normalize_nav_df(df)
+        assert "净值日期" in result.columns
+        assert "单位净值" in result.columns

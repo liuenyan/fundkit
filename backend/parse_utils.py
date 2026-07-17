@@ -59,6 +59,15 @@ def to_float_series(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
 
+def normalize_nav_df(df: pd.DataFrame) -> pd.DataFrame:
+    """归一化净值 DataFrame：中文列名→英文  string→datetime/float"""
+    df["date"] = pd.to_datetime(df["净值日期"])
+    df["unit_nav"] = pd.to_numeric(df["单位净值"], errors="coerce")
+    df["acc_nav"] = pd.to_numeric(df["累计净值"], errors="coerce")
+    df["daily_return"] = pd.to_numeric(df["日增长率"], errors="coerce")
+    return df
+
+
 _SUFFIXES = [
     "指数",
     "(价格)",
