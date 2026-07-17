@@ -21,17 +21,7 @@ FUND_CATEGORIES = [
     "其他",
 ]
 
-SORT_OPTIONS = {
-    "默认": None,
-    "综合费率从低到高": ("综合费率", True),
-    "综合费率从高到低": ("综合费率", False),
-    "规模从大到小": ("基金规模", False),
-    "规模从小到大": ("基金规模", True),
-    "成立日期从早到晚": ("成立日期", True),
-    "成立日期从晚到早": ("成立日期", False),
-    "净值从高到低": ("单位净值", False),
-    "净值从低到高": ("单位净值", True),
-}
+SORT_OPTIONS = fund_data.SORT_OPTIONS
 
 
 def _classify_category(fund_type: str) -> str:
