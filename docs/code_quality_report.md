@@ -1,10 +1,10 @@
 # 代码质量评估报告
 
-> 生成日期：2026-06-28
+> 生成日期：2026-07-17
 
 ## 总体评估：良好
 
-经过多轮重构后，代码库达到良好质量水平。明显重复已消除，架构分层清晰，工具链零警告。
+经过多轮重构和补测后，代码库达到良好质量水平。工具链零警告，测试覆盖关键模块。
 
 ---
 
@@ -12,59 +12,84 @@
 
 | 指标 | 数值 |
 |------|------|
-| Python 源文件数（非 test） | 22 |
-| 总代码行数 | 3,812 |
-| 函数总数（非 test） | 127 |
-| 含返回类型注解的函数 | 108（85%） |
-| 类总数 | 20 |
-| Ruff 警告数 | 0 |
-| 测试数 | 30 |
+| Python 源文件数（非 test） | 25 |
+| 总代码行数 | 8,297（有效代码 6,738） |
+| 测试代码行数 | 1,524 |
+| 测试数 | 275 |
 | 测试通过率 | 100% |
+| Ruff 警告数 | 0 |
+| Pyright 错误数 | 0 |
+| 总体测试覆盖率 | 57% |
+| 函数含返回类型注解 | ~95% |
 
 ## 架构分层
 
 ```
-collect_fund_data.py    # 数据预采集（费率/规模/档案/净值/名录/跟踪方式）
-db.py                   # 数据层（OOP，10 张表，含 fund_nav_history 缓存）
-tools/                  # 公用工具
-  ├─ cjk_font.py        # 中文字体检测与设置
-  ├─ formatters.py      # 格式化工具
-  └─ stats.py           # 统计函数（max_drawdown / calc_annualized / calc_percentile）
-backend/                # 业务逻辑层
-  ├─ charting.py        # matplotlib 双面板图表（CLI/UI 共享）
-  ├─ dca_backtest.py    # 定投回测核心（cache-first，BacktestError 异常）
-  ├─ em_fetcher.py      # 东方财富 JS 直取（一次 HTTP + JS eval 获取全量净值）
-  ├─ strategy.py        # 买入/卖出策略基类 + 4 种内置实现（9 个类）
-  ├─ fund_query.py      # 基金查询逻辑
-  ├─ fund_data.py       # 共享层（费率解析、规模兜底、sort_result）
-  ├─ index_fund.py      # 指数选基后端
-  ├─ index_valuation.py # 指数估值后端
-  └─ pension_fund.py    # 养老金选基后端
-app_pages/              # Streamlit UI（5 页，与 st.navigation 一致）
-  ├─ dca.py             # 定投回测
-  ├─ fund_query.py      # 基金查询
-  ├─ index_fund.py      # 指数选基
-  ├─ index_valuation.py # 指数估值
-  └─ pension_fund.py    # 养老金选基
-tests/
-  ├─ test_fund_classify.py      # 分类逻辑（21 用例）
-  └─ test_nav_history_cache.py  # 缓存策略（9 用例）
+app.py / collect_fund_data.py   # 入口点（Streamlit + CLI 采集）
+db.py                           # 数据层（SQLAlchemy Core，10 张表）
+
+backend/                        # 业务逻辑层
+  ├─ dca_backtest.py            # 定投回测核心（873 行，含 CLI main）
+  ├─ strategy.py                # 买入/卖出策略（固定金额/价值平均/均线/目标止盈/移动止盈）
+  ├─ charting.py                # matplotlib 双面板图表
+  ├─ cjk_font.py                # 中文字体检测与设置
+  ├─ em_fetcher.py              # 东方财富 JS 直取
+  ├─ formatters.py              # 格式化函数（百分率/净值/规模/综合费率）
+  ├─ fund_data.py               # 基金数据共享层
+  ├─ fund_query.py              # 基金查询逻辑
+  ├─ index_fetcher.py           # 指数价格查询路由
+  ├─ index_fund.py              # 指数选基后端
+  ├─ index_valuation.py         # 指数估值后端
+  ├─ logger.py                  # 统一日志配置
+  ├─ parse_utils.py             # 字符串解析工具
+  ├─ pension_fund.py            # 养老金选基后端
+  └─ stats.py                   # 财务统计函数
+
+tools/                          # CLI 工具
+  ├─ build_index_name_map.py    # 指数名称→代码映射构造
+  ├─ cnindex_export.py          # CNINDEX 数据导出
+  ├─ compare_strategies.py      # 多策略对比
+  ├─ csi_export.py              # 中证指数导出
+  ├─ find_scenarios.py          # 场景化回测
+  └─ gen_name_map_report.py     # 指数映射报告
+
+app_pages/                      # Streamlit 页面
+  ├─ dca.py                     # 定投回测
+  ├─ fund_query.py              # 基金查询
+  ├─ index_fund.py              # 指数选基
+  ├─ index_valuation.py         # 指数估值
+  └─ pension_fund.py            # 养老金选基
+
+tests/                          # 测试套件（9 文件）
+  ├─ conftest.py                # in-memory SQLite fixture
+  ├─ test_db.py                 # DB 表操作（50 用例）
+  ├─ test_dca_integration.py    # 定投集成（24 用例）
+  ├─ test_formatters.py         # 格式化函数（34 用例）
+  ├─ test_fund_classify.py      # 基金分类（21 用例）
+  ├─ test_nav_history_cache.py  # 缓存策略（9 用例）
+  ├─ test_parse_utils.py        # 解析工具（19 用例）
+  ├─ test_stats.py              # 统计函数（48 用例）
+  └─ test_strategy.py           # 策略类（39 用例）
 ```
 
 ## 优势
 
-1. **零重复模式** — 多轮重构清除了十余处重复代码，提取共享函数到 `tools/` 和 `backend/fund_data.py`
-2. **Ruff 零警告** — 代码风格完全一致（line-length=120, py311）
-3. **测试覆盖** — 分类逻辑 + 缓存策略共 30 个纯函数测试，全部通过
-4. **数据层统一** — `db.py` OOP 化后表单例 API 一致，冷启动零 API 调用
-5. **历史净值缓存** — `fund_nav_history` 表 + `_last_available_data_day` 缓存策略，回测 2 次请求变为 0（缓存命中时）
-6. **错误处理统一** — `BacktestError` 异常替代 `sys.exit(1)`，CLI 与 GUI 统一处理路径
-7. **文件体积合理** — 最大文件 612 行（`dca_backtest.py`），其余 < 600 行
+1. **测试覆盖大幅提升** — 从 30 用例 41% 覆盖到 275 用例 57% 覆盖，核心统计/格式化/策略/DB 模块达 88-100%
+2. **Ruff + Pyright 零警告** — pre-commit 钩子强制执行
+3. **统一日志** — `backend/logger.py` 消除散落的 `print()` 和静默吞异常
+4. **数据层统一** — `db.py` OOP 化后表 API 一致，in-memory SQLite 可测试
+5. **无循环依赖** — 模块依赖图无环
 
 ## 可改进
 
-| 问题 | 文件 | 说明 | 建议 |
-|------|------|------|------|
-| 部分函数缺返回类型注解 | 19 处（`strategy.py` 基类、`db.py` save、`dca_backtest.py` 辅助函数等） | 多数是 `-> None` 隐式返回或 `-> Self`，当前 ruff ANN 规则未强制 | 低优先级，不影响运行 |
-| 测试覆盖偏窄 | `tests/` 仅 2 文件 | 仅覆盖分类逻辑和缓存策略，回测核心、DB 操作、页面前端未覆盖 | 中优先级，核心路径优先 |
-| `fund_nav_history` 表无 TTL 清理 | `db.py` | 历史缓存随回测使用持续积累，无自动清理机制 | 低优先级，需手动 `DELETE` |
+| 问题 | 文件 | 说明 | 优先级 |
+|------|------|------|--------|
+| Layer 违规 | `backend/index_fetcher.py:18` 从 `tools.build_index_name_map` 导入 `normalize()` | 下层依赖上层，应提至共享模块 | 高 |
+| 后端耦合 Streamlit | `fund_query.py`/`index_fund.py`/`pension_fund.py` 直接 `import streamlit` | 无法脱离 UI 复用，应分离缓存装饰器 | 高 |
+| MA 预热 buffer 复制粘贴 | `dca_backtest.py:794` / `dca.py:233` / `compare_strategies.py:79` | 15 行相同逻辑重复 3 次 | 高 |
+| NAV 列类型归一化重复 6 次 | 散落 `dca_backtest.py` / `dca.py` / `compare_strategies.py` / `find_scenarios.py` | 缺 `normalize_nav_df()` 共享函数 | 中 |
+| `_SUFFIXES` / `normalize()` 重复 | `build_index_name_map.py` / `cnindex_export.py` / `index_fund.py` | 3 份独立副本 | 中 |
+| `fmt_pct` 语义不一致 | `backend/formatters.py:10` vs `tools/compare_strategies.py:166` | 同名函数不同语义（% vs 原始值） | 中 |
+| `SORT_OPTIONS` 各自定义 | `fund_data.py` / `fund_query.py` | 后者应复用前者 | 中 |
+| `dca_backtest.py` 神级模块 | 873 行混合数据获取/模拟/绘图/CLI | 应拆分出 importable API | 低 |
+| 25 处 `except Exception:` | 散落 `db.py` / `build_index_name_map.py` 等 | 已加 logger，仍可进一步缩小作用域 | 低 |
