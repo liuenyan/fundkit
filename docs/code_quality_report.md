@@ -89,7 +89,7 @@ tests/                          # 测试套件（9 文件）
 | ~~MA 预热 buffer 复制粘贴~~ | ~~`dca_backtest.py:794` / `dca.py:233` / `compare_strategies.py:79`~~ | ~~15 行相同逻辑重复 3 次~~ | ~~高~~ |
 | ~~NAV 列类型归一化重复 6 次~~ | ~~散落 `dca_backtest.py` / `dca.py` / `compare_strategies.py` / `find_scenarios.py`~~ | ~~缺 `normalize_nav_df()` 共享函数~~ | ~~中~~ |
 | ~~`_SUFFIXES` / `normalize()` 重复~~ | ~~`build_index_name_map.py` / `cnindex_export.py` / `index_fund.py`~~ | ~~3 份独立副本~~ | ~~中~~ |
-| `fmt_pct` 语义不一致 | `backend/formatters.py:10` vs `tools/compare_strategies.py:166` | 同名函数不同语义（% vs 原始值） | 中 |
+| ~~`fmt_pct` 语义不一致~~ | ~~`backend/formatters.py:10` vs `tools/compare_strategies.py:166`~~ | ~~同名函数不同语义~~ | ~~中~~ |
 | `SORT_OPTIONS` 各自定义 | `fund_data.py` / `fund_query.py` | 后者应复用前者 | 中 |
 | `dca_backtest.py` 神级模块 | 873 行混合数据获取/模拟/绘图/CLI | 应拆分出 importable API | 低 |
 | 25 处 `except Exception:` | 散落 `db.py` / `build_index_name_map.py` 等 | 已加 logger，仍可进一步缩小作用域 | 低 |

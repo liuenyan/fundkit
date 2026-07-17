@@ -143,15 +143,15 @@ def run_lumpsum(fund_code: str, start: str, end: str, amount: float, fee: float)
     return None
 
 
-def fmt_pct(v: float) -> str:
+def _fmt_ratio(v: float) -> str:
     return f"{v * 100:.1f}%"
 
 
-def fmt_money(v: float) -> str:
+def _fmt_money(v: float) -> str:
     return f"{v:,.0f}"
 
 
-def fmt_ann(v: float) -> str:
+def _fmt_ann_ret(v: float) -> str:
     return f"{v * 100:.2f}%"
 
 
@@ -195,10 +195,10 @@ def build_markdown_table(records: list[dict], fund_names: dict[str, str]) -> str
             def cell(r: dict | None, show_mdd: bool = True) -> str:
                 if r is None:
                     return "—"
-                ret_str = f"{fmt_pct(r['total_ret'])} / {fmt_ann(r['ann_ret'])}"
+                ret_str = f"{_fmt_ratio(r['total_ret'])} / {_fmt_ann_ret(r['ann_ret'])}"
                 if show_mdd:
-                    return f"{ret_str}  回撤 {fmt_pct(r['mdd'])}  投入 {fmt_money(r['total_invest'])}"
-                return f"{ret_str}  投入 {fmt_money(r['total_invest'])}"
+                    return f"{ret_str}  回撤 {_fmt_ratio(r['mdd'])}  投入 {_fmt_money(r['total_invest'])}"
+                return f"{ret_str}  投入 {_fmt_money(r['total_invest'])}"
 
             lines.append(
                 f"{scenario_name:>10}  {cell(fixed):>24}  {cell(va):>24}  {cell(ma):>24}  {cell(ls, False):>24}"
