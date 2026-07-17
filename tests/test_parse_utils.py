@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from backend.parse_utils import parse_pct, parse_pct_series, parse_scale, to_float_series
+from backend.parse_utils import normalize, parse_pct, parse_pct_series, parse_scale, to_float_series
 
 
 class TestParsePct:
@@ -124,3 +124,47 @@ class TestToFloatSeries:
         s = pd.Series(["10", "20.5", "30"])
         result = to_float_series(s)
         assert result.tolist() == [10.0, 20.5, 30.0]
+
+
+class TestNormalize:
+    def test_remove_index_suffix(self) -> None:
+        assert normalize("沪深300指数") == "沪深300"
+
+    def test_remove_price_suffix(self) -> None:
+        assert normalize("中证500(价格)") == "中证500"
+
+    def test_remove_industry_suffix(self) -> None:
+        assert normalize("信息技术(行业)") == "信息技术"
+
+    def test_remove_space(self) -> None:
+        assert normalize("中证 500") == "中证500"
+
+    def test_remove_currency_suffix(self) -> None:
+        assert normalize("恒生指数港元") == "恒生"
+
+    def test_remove_currency_rmb(self) -> None:
+        assert normalize("上证50人民币") == "上证50"
+
+    def test_break_on_first_currency_match(self) -> None:
+        assert normalize("美元人民币") == "美元"
+
+    def test_remove_halfwidth_brackets(self) -> None:
+        assert normalize("中证消费(HS)") == "中证消费"
+
+    def test_remove_fullwidth_brackets(self) -> None:
+        assert normalize("中证消费（全收益）") == "中证消费"
+
+    def test_fullwidth_open_halfwidth_close(self) -> None:
+        assert normalize("中证消费（全收益)") == "中证消费"
+
+    def test_strip_whitespace(self) -> None:
+        assert normalize("  沪深300  ") == "沪深300"
+
+    def test_no_change(self) -> None:
+        assert normalize("沪深300") == "沪深300"
+
+    def test_multiple_suffixes(self) -> None:
+        assert normalize("中证500(价格)人民币") == "中证500"
+
+    def test_empty_string(self) -> None:
+        assert normalize("") == ""

@@ -3,7 +3,6 @@
 """
 
 import pandas as pd
-import streamlit as st
 
 import db
 from . import fund_data
@@ -44,7 +43,6 @@ def _classify_category(fund_type: str) -> str:
     return "其他"
 
 
-@st.cache_data(ttl=3600, show_spinner="获取全市场基金数据…")
 def load_all_funds() -> pd.DataFrame:
     """JOIN 五表返回全市场基金信息，含大类分类和最近净值"""
     db.init_db()
@@ -129,7 +127,6 @@ def query_funds(
     return fund_data.sort_result(result, sort_by, sort_options=SORT_OPTIONS)
 
 
-@st.cache_data(ttl=86400, show_spinner="获取基金管理人排名…")
 def fetch_top_managers(n: int = 30) -> list[str]:
     """按管理规模（净资产合计）返回 Top N 基金管理人"""
     db.init_db()

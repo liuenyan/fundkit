@@ -57,3 +57,32 @@ def to_float_series(s: pd.Series) -> pd.Series:
     s = s.astype(str).str.strip()
     s = s.replace(["", "nan", "<NA>", "None"], None)
     return pd.to_numeric(s, errors="coerce")
+
+
+_SUFFIXES = [
+    "指数",
+    "(价格)",
+    "(四级行业)",
+    "(全价)",
+    "(总值)",
+    "(总收益)",
+    "(LOF)",
+    "(行业)",
+    " ",
+]
+_CURRENCY_SUFFIXES = ["人民币", "港元", "美元", "港币"]
+
+
+def normalize(name: str) -> str:
+    """统一归一化指数/基金名称：去常见后缀和货币后缀、清括号"""
+    for s in _SUFFIXES:
+        name = name.replace(s, "")
+    for s in _CURRENCY_SUFFIXES:
+        if name.endswith(s):
+            name = name[: -len(s)]
+            break
+    if "(" in name and name.endswith(")"):
+        name = name[: name.index("(")]
+    if "（" in name and (name.endswith("）") or name.endswith(")")):
+        name = name[: name.index("（")]
+    return name.strip()

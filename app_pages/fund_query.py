@@ -11,10 +11,21 @@ from backend.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
 from backend.fund_query import (
     FUND_CATEGORIES,
     SORT_OPTIONS,
-    fetch_top_managers,
-    load_all_funds,
     query_funds,
+    fetch_top_managers as _fetch_top_managers,
+    load_all_funds as _load_all_funds,
 )
+
+
+@st.cache_data(ttl=3600, show_spinner="获取全市场基金数据…")
+def load_all_funds() -> pd.DataFrame:
+    return _load_all_funds()
+
+
+@st.cache_data(ttl=86400, show_spinner="获取基金管理人排名…")
+def fetch_top_managers(n: int = 30) -> list[str]:
+    return _fetch_top_managers(n)
+
 
 st.set_page_config(page_title="基金查询", page_icon="🔍", layout="centered")
 

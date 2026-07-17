@@ -18,25 +18,14 @@ import pandas as pd
 import requests
 
 from backend.logger import get_logger
+from backend.parse_utils import normalize
+
 
 logger = get_logger(__name__)
 
 _CNINDEX_URL = "https://www.cnindex.com.cn/index_1020/brochures_1593/201912/P020260506563681367298.xlsx"
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
 _CACHE_FILE = _CACHE_DIR / "cnindex_index_list.csv"
-
-# 归一化后缀（与 build_index_name_map.py 一致）
-_SUFFIXES = ["指数", "(价格)", "(四级行业)", "(全价)", "(总值)", "(总收益)", "(LOF)", "(行业)", " "]
-
-
-def _normalize(name: str) -> str:
-    for s in _SUFFIXES:
-        name = name.replace(s, "")
-    if "(" in name and name.endswith(")"):
-        name = name[: name.index("(")]
-    if "（" in name and name.endswith("）"):
-        name = name[: name.index("（")]
-    return name.strip()
 
 
 def fetch_cnindex_list(force: bool = False) -> pd.DataFrame:
@@ -109,7 +98,7 @@ def get_equity_name_map(df: pd.DataFrame | None = None) -> dict[str, Tuple[str, 
             stripped = full[:-2] if full.endswith("指数") else full
             name_map[stripped] = (code, prefix, short)
             # 全称归一化（保留首次匹配，避免货币变体覆盖标准版）
-            normalized = _normalize(full)
+            normalized = normalize(full)
             if normalized not in name_map:
                 name_map[normalized] = (code, prefix, short)
 

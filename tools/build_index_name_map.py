@@ -15,6 +15,7 @@ import akshare as ak
 
 import db
 from backend.logger import get_logger, setup_logging
+from backend.parse_utils import normalize
 from db import engine as db_engine
 from tools.csi_export import get_equity_name_map as get_csi_name_map
 from tools.cnindex_export import get_equity_name_map as get_cnindex_name_map
@@ -79,38 +80,6 @@ def classify_tracking_target(name: str) -> str:
             if kw in name:
                 return itype
     return "equity"
-
-
-# ── 名称归一化 ──
-
-_SUFFIXES = [
-    "指数",
-    "(价格)",
-    "(四级行业)",
-    "(全价)",
-    "(总值)",
-    "(总收益)",
-    "(LOF)",
-    "(行业)",
-    " ",
-]
-_CURRENCY_SUFFIXES = ["人民币", "港元", "美元", "港币"]
-
-
-def normalize(name: str) -> str:
-    for s in _SUFFIXES:
-        name = name.replace(s, "")
-    for s in _CURRENCY_SUFFIXES:
-        if name.endswith(s):
-            name = name[: -len(s)]
-            break
-    # 去掉末尾残留括号内容
-    if "(" in name and name.endswith(")"):
-        name = name[: name.index("(")]
-    # 全角括号也处理（含全角开头+半角结尾的混合情况）
-    if "（" in name and (name.endswith("）") or name.endswith(")")):
-        name = name[: name.index("（")]
-    return name.strip()
 
 
 # ── 手工兜底映射（数据源无法覆盖的条目）──

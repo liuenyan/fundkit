@@ -15,7 +15,7 @@ import requests
 
 import db
 from backend.index_valuation import get_or_update_series
-from tools.build_index_name_map import normalize
+from backend.parse_utils import normalize
 
 logger = logging.getLogger(__name__)
 

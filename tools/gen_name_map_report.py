@@ -6,7 +6,8 @@ import pandas as pd
 
 import db
 from db import engine as db_engine
-from tools.build_index_name_map import classify_tracking_target, normalize
+from backend.parse_utils import normalize
+from tools.build_index_name_map import classify_tracking_target
 
 REPORT_PATH = Path(__file__).resolve().parent.parent / "docs" / "index_name_map_report.md"
 

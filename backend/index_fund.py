@@ -5,8 +5,9 @@
 
 import re
 
+import logging
+
 import pandas as pd
-import streamlit as st
 
 import db
 from . import fund_data
@@ -73,13 +74,15 @@ COMMON_INDICES = [
 ]
 
 
-@st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
+logger = logging.getLogger(__name__)
+
+
 def fetch_all_index_funds() -> pd.DataFrame:
     db.init_db()
     result = db.load_index_fund_nav()
     if result is not None and not result.empty:
         return result
-    st.error("净值数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
+    logger.warning("净值数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
     return pd.DataFrame()
 
 

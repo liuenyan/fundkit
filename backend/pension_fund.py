@@ -6,8 +6,9 @@
 import re
 from typing import Any
 
+import logging
+
 import pandas as pd
-import streamlit as st
 
 import db
 from . import fund_data
@@ -45,12 +46,14 @@ PENSION_CATEGORIES = [
 ]
 
 
-@st.cache_data(ttl=3600, show_spinner="获取养老金基金数据…")
+logger = logging.getLogger(__name__)
+
+
 def fetch_pension_funds() -> pd.DataFrame:
     db.init_db()
     result = db.load_pension_funds()
     if result is None or result.empty:
-        st.error("数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
+        logger.warning("数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
         return pd.DataFrame()
     result["养老金分类"] = result.apply(classify_pension_category, axis=1)
     return result

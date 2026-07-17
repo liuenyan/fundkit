@@ -11,11 +11,17 @@ from backend.formatters import fmt_nav, fmt_pct, fmt_scale, fmt_total_fee
 from backend.index_fund import (
     COMMON_INDICES,
     SORT_OPTIONS,
-    fetch_all_index_funds,
     filter_funds,
     search_funds_by_index,
     sort_result,
+    fetch_all_index_funds as _fetch_all_index_funds,
 )
+
+
+@st.cache_data(ttl=3600, show_spinner="获取全市场指数基金数据…")
+def fetch_all_index_funds() -> pd.DataFrame:
+    return _fetch_all_index_funds()
+
 
 st.set_page_config(page_title="指数选基", page_icon="🎯", layout="centered")
 
@@ -59,6 +65,10 @@ if index_name:
         all_funds = fetch_all_index_funds()
         result = search_funds_by_index(all_funds, index_name)
         sort_by = "默认"
+
+    if all_funds.empty:
+        st.error("净值数据尚未采集，请运行：`uv run python collect_fund_data.py --nav`")
+        st.stop()
 
     if result.empty:
         st.warning(f"未找到跟踪「{index_name}」的基金，请尝试其他关键词")
