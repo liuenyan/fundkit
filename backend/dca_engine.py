@@ -50,11 +50,11 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
     if db.fund_nav_history.is_cached(fund_code, end_date):
         cached = db.fund_nav_history.load(fund_code, start_date, end_date)
         if cached is not None and not cached.empty:
-            print(f"从本地缓存读取 {len(cached)} 条净值记录")
+            logger.info("从本地缓存读取 %d 条净值记录", len(cached))
             df = cached
             return normalize_nav_df(df)
 
-    print(f"获取基金 {fund_code} 历史净值数据 ...")
+    logger.info("获取基金 %s 历史净值数据 ...", fund_code)
     try:
         df = fetch_nav_data(fund_code)
     except Exception as e:
@@ -73,7 +73,7 @@ def fetch_fund_data(fund_code: str, start_date: str, end_date: str) -> pd.DataFr
     if df.empty:
         raise BacktestError(f"{start_date} ~ {end_date} 范围内无数据")
 
-    print(f"获取到 {len(df)} 条净值记录")
+    logger.info("获取到 %d 条净值记录", len(df))
     return df
 
 
